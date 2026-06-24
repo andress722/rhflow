@@ -1,0 +1,597 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  HR
+  MANAGER
+  VIEWER
+}
+
+enum PilotStatus {
+  NOT_STARTED
+  ACTIVE
+  PROPOSAL_SENT
+  WON
+  LOST
+}
+
+enum WorkModel {
+  PRESENTIAL
+  REMOTE
+  HYBRID
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum OccurrenceType {
+  MISSED_CLOCK_IN
+  MISSED_CLOCK_OUT
+  LATE_ARRIVAL
+  EARLY_LEAVE
+  ABSENCE
+  TEMPORARY_ABSENCE
+  MEDICAL_CERTIFICATE
+  REMOTE_CHECKIN_MISSED
+  REMOTE_CHECKOUT_MISSED
+  REMOTE_TECHNICAL_ISSUE
+  REMOTE_CHECKIN_NOT_RESPONDED
+}
+
+enum OccurrenceStatus {
+  OPEN
+  WAITING_EMPLOYEE
+  WAITING_MANAGER
+  WAITING_HR
+  RESOLVED
+  REJECTED
+  CANCELLED
+}
+
+enum OccurrenceSource {
+  SYSTEM
+  WHATSAPP
+  MANUAL
+  IMPORT
+  AUTOMATION
+}
+
+enum MedicalCertificateStatus {
+  RECEIVED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  RESUBMISSION_REQUESTED
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  legalName String?
+  cnpj      String?
+  timezone  String   @default("America/Sao_Paulo")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users               User[]
+  employees           Employee[]
+  workSchedules       WorkSchedule[]
+  occurrences         Occurrence[]
+  occurrenceEvents    OccurrenceEvent[]
+  medicalCertificates MedicalCertificate[]
+  absenceRecords      AbsenceRecord[]
+  remoteCheckins      RemoteCheckin[]
+  auditLogs           AuditLog[]
+  settings            CompanySettings?
+  subscription        CompanySubscription?
+  usageCounters       UsageCounter[]
+  whatsappChannel     WhatsAppChannel?
+  whatsappMessageLogs WhatsAppMessageLog[]
+  invites             UserInvite[]
+
+  pilotStatus     PilotStatus @default(NOT_STARTED)
+  pilotStartedAt  DateTime?
+  pilotEndsAt     DateTime?
+  proposalSentAt  DateTime?
+  convertedAt     DateTime?
+  pilotLostReason String?
+  commercialNotes String?
+}
+
+model User {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id])
+  name         String
+  email        String
+  passwordHash String
+  role         UserRole
+  isActive     Boolean  @default(true)
+  mustChangePassword Boolean @default(false)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  managedEmployees     Employee[]           @relation("ManagerToEmployee")
+  occurrences          Occurrence[]         @relation("ManagerToOccurrence")
+  resolvedOccurrences  Occurrence[]         @relation("ResolvedByToOccurrence")
+  reviewedCertificates MedicalCertificate[] @relation("ReviewedByToCertificate")
+  createdAbsenceRecords AbsenceRecord[]     @relation("CreatedByUserToAbsence")
+  auditLogs            AuditLog[]
+  passwordResetTokens  PasswordResetToken[]
+  createdInvites       UserInvite[]         @relation("CreatedInvites")
+  assignedLeads        PilotLead[]          @relation("AssignedToUser")
+  leadActivities       LeadActivity[]       @relation("CreatedByUser")
+
+  @@unique([companyId, email])
+}
+
+model Employee {
+  id             String         @id @default(uuid())
+  companyId      String
+  company        Company        @relation(fields: [companyId], references: [id])
+  managerUserId  String?
+  manager        User?          @relation("ManagerToEmployee", fields: [managerUserId], references: [id])
+  fullName       String
+  cpf            String
+  whatsapp       String
+  email          String?
+  sector         String?
+  jobTitle       String?
+  workModel      WorkModel      @default(PRESENTIAL)
+  workScheduleId String?
+  workSchedule   WorkSchedule?  @relation(fields: [workScheduleId], references: [id])
+  status         EmployeeStatus @default(ACTIVE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  occurrences         Occurrence[]
+  medicalCertificates MedicalCertificate[]
+  absenceRecords      AbsenceRecord[]
+  remoteCheckins      RemoteCheckin[]
+
+  @@unique([companyId, cpf])
+}
+
+model WorkSchedule {
+  id                    String   @id @default(uuid())
+  companyId             String
+  company               Company  @relation(fields: [companyId], references: [id])
+  name                  String
+  workDays              Json
+  expectedClockIn        String
+  expectedClockOut       String
+  toleranceMinutes       Int      @default(10)
+  requireRemoteCheckin   Boolean  @default(false)
+  requireRemoteCheckout  Boolean  @default(false)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  employees Employee[]
+  remoteCheckins RemoteCheckin[]
+}
+
+model Occurrence {
+  id               String           @id @default(uuid())
+  companyId        String
+  company          Company          @relation(fields: [companyId], references: [id])
+  employeeId       String
+  employee         Employee         @relation(fields: [employeeId], references: [id])
+  managerUserId    String?
+  manager          User?            @relation("ManagerToOccurrence", fields: [managerUserId], references: [id])
+  type             OccurrenceType
+  status           OccurrenceStatus @default(OPEN)
+  title            String
+  description      String?
+  occurrenceDate   DateTime
+  source           OccurrenceSource @default(SYSTEM)
+  severity         String           @default("LOW")
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  resolvedBy       User?            @relation("ResolvedByToOccurrence", fields: [resolvedByUserId], references: [id])
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  events              OccurrenceEvent[]
+  medicalCertificates MedicalCertificate[]
+  absenceRecords      AbsenceRecord[]
+  remoteCheckins      RemoteCheckin[]
+}
+
+model OccurrenceEvent {
+  id           String     @id @default(uuid())
+  companyId    String
+  company      Company    @relation(fields: [companyId], references: [id])
+  occurrenceId String
+  occurrence   Occurrence @relation(fields: [occurrenceId], references: [id])
+  actorType    String
+  actorUserId  String?
+  eventType    String
+  message      String?
+  metadata     Json?
+  createdAt    DateTime   @default(now())
+}
+
+model MedicalCertificate {
+  id                String                   @id @default(uuid())
+  companyId         String
+  company           Company                  @relation(fields: [companyId], references: [id])
+  employeeId        String
+  employee          Employee                 @relation(fields: [employeeId], references: [id])
+  occurrenceId      String?
+  occurrence        Occurrence?              @relation(fields: [occurrenceId], references: [id])
+  originalFilename  String
+  storedFilename    String
+  mimeType          String
+  fileSize          Int
+  storagePath       String
+  status            MedicalCertificateStatus @default(RECEIVED)
+  certificateDate   DateTime?
+  suggestedDays     Int?
+  startDate         DateTime?
+  endDate           DateTime?
+  approvedDays      Int?
+  rejectionReason   String?
+  notes             String?
+  reviewedByUserId  String?
+  reviewedBy        User?                    @relation("ReviewedByToCertificate", fields: [reviewedByUserId], references: [id])
+  reviewedAt        DateTime?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  absenceRecords      AbsenceRecord[]
+}
+
+enum AbsenceType {
+  MEDICAL_LEAVE
+  JUSTIFIED_ABSENCE
+  UNJUSTIFIED_ABSENCE
+  TEMPORARY_ABSENCE
+}
+
+enum AbsenceStatus {
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+model AbsenceRecord {
+  id                   String             @id @default(uuid())
+  companyId            String
+  company              Company            @relation(fields: [companyId], references: [id])
+  employeeId           String
+  employee             Employee           @relation(fields: [employeeId], references: [id])
+  occurrenceId         String?
+  occurrence           Occurrence?        @relation(fields: [occurrenceId], references: [id])
+  medicalCertificateId String?
+  medicalCertificate   MedicalCertificate? @relation(fields: [medicalCertificateId], references: [id])
+  startDate            DateTime
+  endDate              DateTime
+  days                 Int
+  type                 AbsenceType
+  status               AbsenceStatus
+  createdByUserId      String
+  createdByUser        User               @relation("CreatedByUserToAbsence", fields: [createdByUserId], references: [id])
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+enum RemoteCheckinStatus {
+  PENDING
+  CONFIRMED
+  LATE
+  ABSENCE_REPORTED
+  ISSUE_REPORTED
+  NOT_RESPONDED
+}
+
+model RemoteCheckin {
+  id              String              @id @default(uuid())
+  companyId       String
+  company         Company             @relation(fields: [companyId], references: [id])
+  employeeId      String
+  employee        Employee            @relation(fields: [employeeId], references: [id])
+  workScheduleId  String?
+  workSchedule    WorkSchedule?       @relation(fields: [workScheduleId], references: [id])
+  occurrenceId    String?
+  occurrence      Occurrence?         @relation(fields: [occurrenceId], references: [id])
+  checkinDate     DateTime            // Normalized date representing the local date start
+  expectedAt      DateTime?
+  sentAt          DateTime            @default(now())
+  respondedAt     DateTime?
+  status          RemoteCheckinStatus @default(PENDING)
+  responseOption  String?
+  responseText    String?
+  source          String              @default("AUTOMATION")
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([employeeId, checkinDate])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String?
+  entityId  String?
+  metadata  Json?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([companyId, action])
+  @@index([companyId, createdAt])
+  @@index([userId])
+}
+
+model CompanySettings {
+  id                          String   @id @default(uuid())
+  companyId                   String   @unique
+  company                     Company  @relation(fields: [companyId], references: [id])
+  defaultCheckinGraceMinutes  Int      @default(30)
+  defaultCheckinSendTime      String?
+  allowManagerExport          Boolean  @default(true)
+  allowViewerReports          Boolean  @default(true)
+  enableRemoteCheckin         Boolean  @default(true)
+  enableBatchCheckin          Boolean  @default(true)
+  enableMedicalCertificates   Boolean  @default(true)
+  whatsappCheckinMessage      String?
+  whatsappNotRespondedMessage String?
+  whatsappManagerAlertMessage String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELLED
+}
+
+model Plan {
+  id                 String   @id @default(uuid())
+  name               String
+  code               String   @unique
+  maxEmployees       Int      @default(10)
+  maxMonthlyCheckins Int      @default(300)
+  maxMonthlyUploads  Int      @default(50)
+  maxMonthlyExports  Int      @default(5)
+  enableReports      Boolean  @default(true)
+  enableBatchCheckin Boolean  @default(false)
+  enableMedicalModule Boolean  @default(false)
+  enableExports      Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  subscriptions      CompanySubscription[]
+}
+
+model CompanySubscription {
+  id        String             @id @default(uuid())
+  companyId String             @unique
+  company   Company            @relation(fields: [companyId], references: [id])
+  planId    String
+  plan      Plan               @relation(fields: [planId], references: [id])
+  status    SubscriptionStatus @default(ACTIVE)
+  startedAt DateTime           @default(now())
+  endsAt    DateTime?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}
+
+model UsageCounter {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  period    String   // Format YYYY-MM
+  key       String   // e.g. "employees_created", "remote_checkins", "medical_uploads", "report_exports"
+  value     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, period, key])
+  @@index([companyId, period])
+}
+
+enum WhatsAppProvider {
+  SIMULATED
+  META_CLOUD
+}
+
+enum WhatsAppChannelStatus {
+  DISCONNECTED
+  CONNECTED
+  ERROR
+  SIMULATION
+}
+
+enum WhatsAppMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum WhatsAppMessageStatus {
+  SENT
+  RECEIVED
+  FAILED
+  SIMULATED
+}
+
+model WhatsAppChannel {
+  id             String                @id @default(uuid())
+  companyId      String                @unique
+  company        Company               @relation(fields: [companyId], references: [id])
+  provider       WhatsAppProvider      @default(SIMULATED)
+  status         WhatsAppChannelStatus @default(SIMULATION)
+  channelKey     String                @unique @default(uuid())
+  phoneNumber    String?
+  displayName    String?
+  webhookSecret  String?
+  accessTokenEnc String?
+  providerConfig Json                  @default("{}")
+  lastInboundAt  DateTime?
+  lastOutboundAt DateTime?
+  lastError      String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([companyId])
+  @@index([channelKey])
+}
+
+model WhatsAppMessageLog {
+  id        String                   @id @default(uuid())
+  companyId String
+  company   Company                  @relation(fields: [companyId], references: [id])
+  direction WhatsAppMessageDirection
+  provider  WhatsAppProvider
+  to        String
+  from      String
+  body      String
+  status    WhatsAppMessageStatus
+  metadata  Json                     @default("{}")
+  createdAt DateTime                 @default(now())
+
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([companyId, direction])
+  @@index([companyId, status])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([usedAt])
+}
+
+model UserInvite {
+  id              String    @id @default(uuid())
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  email           String
+  role            UserRole
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdByUserId String
+  createdByUser   User      @relation("CreatedInvites", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  createdAt       DateTime  @default(now())
+
+  @@index([companyId, email])
+  @@index([expiresAt])
+  @@index([acceptedAt])
+}
+
+model OperationalErrorLog {
+  id         String   @id @default(uuid())
+  companyId  String?
+  userId     String?
+  requestId  String?
+  route      String?
+  method     String?
+  errorCode  String
+  message    String
+  statusCode Int?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([requestId])
+  @@index([errorCode, createdAt])
+  @@index([statusCode, createdAt])
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  WON
+  LOST
+}
+
+enum LeadActivityType {
+  NOTE
+  STATUS_CHANGED
+  CONTACTED
+  DEMO_SCHEDULED
+  FOLLOW_UP_SCHEDULED
+  WON
+  LOST
+}
+
+model PilotLead {
+  id               String         @id @default(uuid())
+  name             String
+  companyName      String
+  role             String?
+  email            String
+  whatsapp         String?
+  employeeCount    Int?
+  mainPain         String?
+  status           LeadStatus     @default(NEW)
+  source           String?
+  notes            String?
+  ipHash           String?
+  userAgent        String?
+  metadata         Json?
+  assignedToUserId String?
+  assignedTo       User?          @relation("AssignedToUser", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  nextFollowUpAt   DateTime?
+  lastContactedAt  DateTime?
+  demoScheduledAt  DateTime?
+  lostReason       String?
+  wonAt            DateTime?
+  activities       LeadActivity[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([email])
+  @@index([assignedToUserId])
+  @@index([nextFollowUpAt])
+  @@index([demoScheduledAt])
+}
+
+model LeadActivity {
+  id              String           @id @default(uuid())
+  leadId          String
+  lead            PilotLead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type            LeadActivityType
+  note            String?
+  metadata        Json?
+  createdByUserId String?
+  createdByUser   User?            @relation("CreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime         @default(now())
+
+  @@index([leadId])
+  @@index([createdByUserId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+

@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: presencaflow-db-prod
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_secure_password_prod
+      POSTGRES_DB: presencaflow
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    # Exposing no ports to keep PostgreSQL secure internally within Docker network
+
+  redis:
+    image: redis:7-alpine
+    container_name: presencaflow-redis-prod
+    restart: always
+    volumes:
+      - redis_prod_data:/data
+    # Exposing no ports to keep Redis secure internally within Docker network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: presencaflow-backend-prod
+    restart: always
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://postgres:postgres_secure_password_prod@db:5432/presencaflow?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: your-super-secure-jwt-secret-at-least-32-chars-long
+      ENCRYPTION_SECRET: your-super-secure-encryption-secret-at-least-32-chars-long
+      FRONTEND_URL: http://localhost:3000
+      APP_BASE_URL: http://localhost:3001
+      STORAGE_PATH: /app/storage
+      NODE_ENV: production
+      INTERNAL_JOB_SECRET: your-internal-job-secret-key-production-32-chars
+      WHATSAPP_LOG_RETENTION_DAYS: 180
+      AUDIT_LOG_RETENTION_DAYS: 365
+    volumes:
+      - backend_storage:/app/storage
+    ports:
+      - "3001:3001"
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:3001/api
+    container_name: presencaflow-frontend-prod
+    restart: always
+    environment:
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_prod_data:
+  redis_prod_data:
+  backend_storage:
