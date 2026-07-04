@@ -14,9 +14,12 @@ import {
   Clock,
   ExternalLink,
   ChevronRight,
-  Loader2,
   Download,
+  HelpCircle,
+  Loader2,
 } from 'lucide-react';
+import Link from 'next/link';
+import { trackEvent } from '@/lib/telemetry';
 import { api } from '@/lib/api';
 import { getUser } from '@/lib/auth';
 import PlanErrorAlert from '@/components/PlanErrorAlert';
@@ -75,6 +78,7 @@ export default function MedicalCertificatesPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [reviewError, setReviewError] = useState('');
   const [reviewErrorRequestId, setReviewErrorRequestId] = useState<string | null>(null);
 
@@ -87,6 +91,7 @@ export default function MedicalCertificatesPage() {
     const user = getUser();
     setCurrentUser(user);
     fetchData();
+    trackEvent('PAGE_VIEW', 'MEDICAL_CERTIFICATES', { path: '/app/medical-certificates' });
   }, []);
 
   const fetchData = async () => {
@@ -211,6 +216,37 @@ export default function MedicalCertificatesPage() {
       }
     }
   }, [startDate, endDate]);
+
+  const handleOcrExtraction = async () => {
+    if (!selectedCert) return;
+    setIsOcrLoading(true);
+    setReviewError('');
+    try {
+      const res = await api.post(`/medical-certificates/${selectedCert.id}/ocr`, {});
+      if (res.success && res.data) {
+        const data = res.data;
+        if (data.issueDate) {
+          setStartDate(data.issueDate);
+          if (data.daysSuggested) {
+            setApprovedDays(data.daysSuggested.toString());
+            // Calculate end date based on issueDate + daysSuggested
+            const start = new Date(data.issueDate);
+            start.setDate(start.getDate() + data.daysSuggested - 1);
+            setEndDate(start.toISOString().split('T')[0]);
+          }
+        }
+        if (data.notes) {
+          setNotes((prev) => (prev ? prev + '\n' + data.notes : data.notes));
+        }
+      } else {
+        setReviewError(res.error?.message || 'Falha ao processar dados via OCR.');
+      }
+    } catch (err) {
+      setReviewError('Erro de conexão ao processar OCR.');
+    } finally {
+      setIsOcrLoading(false);
+    }
+  };
 
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -373,15 +409,24 @@ export default function MedicalCertificatesPage() {
           </p>
         </div>
 
-        {showUploadAction && (
-          <button
-            onClick={() => setIsUploadOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow shadow-indigo-600/10 transition-all text-sm cursor-pointer"
+        <div className="flex gap-2">
+          <Link
+            href="/app/help"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-950/30 hover:bg-indigo-900/30 text-indigo-400 border border-indigo-900/40 text-xs font-semibold transition-all cursor-pointer"
           >
-            <UploadCloud className="w-4.5 h-4.5" />
-            Enviar Atestado
-          </button>
-        )}
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>Ver Manuais</span>
+          </Link>
+          {showUploadAction && (
+            <button
+              onClick={() => setIsUploadOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow shadow-indigo-600/10 transition-all text-sm cursor-pointer"
+            >
+              <UploadCloud className="w-4.5 h-4.5" />
+              Enviar Atestado
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter and search bar */}
@@ -830,6 +875,29 @@ export default function MedicalCertificatesPage() {
                           <form onSubmit={handleReviewSubmit} className="space-y-4 p-4 rounded-lg bg-slate-950/30 border border-slate-850">
                             {reviewAction === 'APPROVE' && (
                               <>
+                                <div className="p-3 mb-2 rounded-lg bg-indigo-500/5 border border-indigo-500/10 flex items-center justify-between gap-3 animate-fadeIn">
+                                  <div>
+                                    <h5 className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">PresençaFlow Vision IA</h5>
+                                    <p className="text-[9px] text-slate-500 mt-0.5 leading-normal">
+                                      Preencha os campos analisando a imagem do atestado.
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={handleOcrExtraction}
+                                    disabled={isOcrLoading}
+                                    className="px-2.5 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-[10px] font-bold text-white shrink-0 shadow flex items-center gap-1 transition-all cursor-pointer"
+                                  >
+                                    {isOcrLoading ? (
+                                      <>
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        Processando...
+                                      </>
+                                    ) : (
+                                      'Extrair Dados'
+                                    )}
+                                  </button>
+                                </div>
                                 <div className="grid grid-cols-2 gap-3">
                                   <div className="space-y-1">
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase">Data de Início *</label>

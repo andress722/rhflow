@@ -150,6 +150,7 @@ export class ReportsService {
       const latestCheckin = occ.remoteCheckins[0] || null;
 
       items.push({
+        id: occ.id,
         date: occ.occurrenceDate.toISOString().split('T')[0],
         employeeId: emp.id,
         employeeName: emp.fullName,
@@ -174,6 +175,7 @@ export class ReportsService {
       uniqueEmployees.add(emp.id);
 
       items.push({
+        id: c.id,
         date: c.checkinDate.toISOString().split('T')[0],
         employeeId: emp.id,
         employeeName: emp.fullName,

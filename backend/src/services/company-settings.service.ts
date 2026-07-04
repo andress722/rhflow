@@ -51,6 +51,8 @@ export class CompanySettingsService {
       'whatsappCheckinMessage',
       'whatsappNotRespondedMessage',
       'whatsappManagerAlertMessage',
+      'absenteeismLimitRate',
+      'enableFacialRecognition',
     ];
 
     for (const field of fieldsToCompare) {

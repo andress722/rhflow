@@ -1,10 +1,11 @@
 import { prisma } from '../lib/prisma';
 import crypto from 'crypto';
-import { WhatsAppProvider, WhatsAppChannelStatus, WhatsAppMessageDirection, WhatsAppMessageStatus } from '@prisma/client';
+import { WhatsAppProvider, WhatsAppChannelStatus, WhatsAppMessageDirection, WhatsAppMessageStatus, NotificationSeverity } from '@prisma/client';
 import { RemoteCheckinService } from './remote-checkin.service';
 import { WhatsAppIntentService } from './whatsapp-intent.service';
 import { OccurrenceService } from './occurrence.service';
 import { OccurrenceSource } from '@prisma/client';
+import { NotificationCenterService } from './notification-center.service';
 
 const ALGORITHM = 'aes-256-gcm';
 
@@ -167,13 +168,30 @@ export class WhatsAppChannelService {
   }
 
   static async recordError(channelId: string, errorMessage: string) {
-    await prisma.whatsAppChannel.update({
+    const channel = await prisma.whatsAppChannel.update({
       where: { id: channelId },
       data: {
         status: WhatsAppChannelStatus.ERROR,
         lastError: errorMessage,
       },
     });
+
+    // Fire-and-forget: notify about WhatsApp channel error
+    const companyId = channel.companyId;
+    const dateStr = new Date().toISOString().split('T')[0];
+    NotificationCenterService.createOrUpdateByDedupeKey({
+      companyId,
+      role: 'HR',
+      type: 'WHATSAPP_CHANNEL_ERROR',
+      severity: NotificationSeverity.WARNING,
+      title: 'Erro no canal WhatsApp',
+      message: `O canal WhatsApp da empresa apresentou um erro. Verifique as configurações.`,
+      actionUrl: `/app/settings/whatsapp`,
+      entityType: 'WhatsAppChannel',
+      entityId: channelId,
+      dedupeKey: `company:${companyId}:whatsapp-error:${dateStr}`,
+      metadata: { companyId },
+    }).catch(() => {/* silent */});
   }
 
   static async sendMessage(

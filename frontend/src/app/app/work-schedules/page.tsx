@@ -24,6 +24,8 @@ export default function WorkSchedulesPage() {
 
   // Modal state
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'schedules' | 'calendar'>('schedules');
+  const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
@@ -37,6 +39,9 @@ export default function WorkSchedulesPage() {
     toleranceMinutes: 10,
     requireRemoteCheckin: false,
     requireRemoteCheckout: false,
+    latitude: '',
+    longitude: '',
+    radiusMeters: 200,
   });
 
   const [formError, setFormError] = useState('');
@@ -75,6 +80,9 @@ export default function WorkSchedulesPage() {
       toleranceMinutes: 10,
       requireRemoteCheckin: false,
       requireRemoteCheckout: false,
+      latitude: '',
+      longitude: '',
+      radiusMeters: 200,
     });
     setFormError('');
     setIsModalOpen(true);
@@ -102,6 +110,9 @@ export default function WorkSchedulesPage() {
       toleranceMinutes: sch.toleranceMinutes ?? 10,
       requireRemoteCheckin: sch.requireRemoteCheckin ?? false,
       requireRemoteCheckout: sch.requireRemoteCheckout ?? false,
+      latitude: sch.latitude !== null && sch.latitude !== undefined ? String(sch.latitude) : '',
+      longitude: sch.longitude !== null && sch.longitude !== undefined ? String(sch.longitude) : '',
+      radiusMeters: sch.radiusMeters ?? 200,
     });
     setFormError('');
     setIsModalOpen(true);
@@ -124,11 +135,17 @@ export default function WorkSchedulesPage() {
     setIsSaving(true);
 
     try {
+      const payload = {
+        ...formData,
+        latitude: formData.latitude !== '' ? parseFloat(formData.latitude) : null,
+        longitude: formData.longitude !== '' ? parseFloat(formData.longitude) : null,
+        radiusMeters: formData.radiusMeters !== '' ? parseInt(formData.radiusMeters, 10) : null,
+      };
       let res;
       if (modalMode === 'create') {
-        res = await api.post('/work-schedules', formData);
+        res = await api.post('/work-schedules', payload);
       } else {
-        res = await api.patch(`/work-schedules/${selectedScheduleId}`, formData);
+        res = await api.patch(`/work-schedules/${selectedScheduleId}`, payload);
       }
 
       if (res.success) {
@@ -213,7 +230,33 @@ export default function WorkSchedulesPage() {
         )}
       </div>
 
-      {/* Filter and search bar */}
+      {/* Tab Switcher */}
+      <div className="flex border-b border-slate-800 gap-6 mb-6">
+        <button
+          onClick={() => setActiveTab('schedules')}
+          className={`pb-3 text-sm font-semibold transition-all border-b-2 cursor-pointer ${
+            activeTab === 'schedules'
+              ? 'border-indigo-500 text-white'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          Jornadas & Regras
+        </button>
+        <button
+          onClick={() => setActiveTab('calendar')}
+          className={`pb-3 text-sm font-semibold transition-all border-b-2 cursor-pointer ${
+            activeTab === 'calendar'
+              ? 'border-indigo-500 text-white'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          Calendário de Escalas (Shift Planner)
+        </button>
+      </div>
+
+      {activeTab === 'schedules' && (
+        <>
+          {/* Filter and search bar */}
       <div className="flex flex-col md:flex-row gap-4 p-5 rounded-xl border border-slate-800 bg-slate-900 shadow-lg">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -314,6 +357,118 @@ export default function WorkSchedulesPage() {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {activeTab === 'calendar' && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Calendar Controller Header */}
+          <div className="p-4 rounded-xl border border-slate-800 bg-slate-900 shadow-lg flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+              Calendário Mensal de Escalas (Shift Planner)
+            </h3>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setCurrentCalendarMonth(new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() - 1, 1))}
+                className="px-3 py-1.5 rounded bg-slate-850 hover:bg-slate-750 border border-slate-800 text-slate-350 font-bold text-xs transition-colors cursor-pointer"
+              >
+                &larr; Mês Anterior
+              </button>
+              <span className="text-sm font-extrabold text-white min-w-[120px] text-center capitalize">
+                {currentCalendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+              </span>
+              <button
+                onClick={() => setCurrentCalendarMonth(new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() + 1, 1))}
+                className="px-3 py-1.5 rounded bg-slate-850 hover:bg-slate-750 border border-slate-800 text-slate-350 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Próximo Mês &rarr;
+              </button>
+            </div>
+          </div>
+
+          {/* Calendar Grid */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow-xl p-4 space-y-2">
+            <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-800 pb-2">
+              <div>Dom</div>
+              <div>Seg</div>
+              <div>Ter</div>
+              <div>Qua</div>
+              <div>Qui</div>
+              <div>Sex</div>
+              <div>Sáb</div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-2">
+              {(() => {
+                const year = currentCalendarMonth.getFullYear();
+                const month = currentCalendarMonth.getMonth();
+                const firstDay = new Date(year, month, 1);
+                const firstDayOfWeek = firstDay.getDay();
+                const totalDays = new Date(year, month + 1, 0).getDate();
+                const days = [];
+
+                for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+                  const prevDate = new Date(year, month, -i);
+                  days.push({ date: prevDate, isCurrentMonth: false });
+                }
+
+                for (let i = 1; i <= totalDays; i++) {
+                  days.push({ date: new Date(year, month, i), isCurrentMonth: true });
+                }
+
+                const totalGrid = Math.ceil(days.length / 7) * 7;
+                const remaining = totalGrid - days.length;
+                for (let i = 1; i <= remaining; i++) {
+                  days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
+                }
+
+                return days.map(({ date, isCurrentMonth }, idx) => {
+                  const dayOfWeekEnglish = date.toLocaleDateString('en-US', { weekday: 'long' });
+                  const activeSchedules = schedules.filter((s) => {
+                    const days = s.workDays || [];
+                    return days.includes(dayOfWeekEnglish);
+                  });
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`min-h-[100px] p-2 rounded-lg border flex flex-col justify-between transition-colors ${
+                        isCurrentMonth
+                          ? 'bg-slate-950/40 border-slate-850 hover:bg-slate-950/70'
+                          : 'bg-slate-900/20 border-slate-900 text-slate-650'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-bold ${isCurrentMonth ? 'text-white' : 'text-slate-600'}`}>
+                          {date.getDate()}
+                        </span>
+                        {date.toDateString() === new Date().toDateString() && (
+                          <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-[8px] font-bold uppercase">
+                            Hoje
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex-1 mt-2 space-y-1.5 overflow-y-auto max-h-[70px]">
+                        {activeSchedules.map((sch) => (
+                          <div
+                            key={sch.id}
+                            className="px-1.5 py-1 rounded bg-indigo-950/30 border border-indigo-500/20 text-[9px] font-semibold text-indigo-300 leading-tight"
+                            title={`${sch.name}: ${sch.expectedClockIn} - ${sch.expectedClockOut}`}
+                          >
+                            <p className="truncate">{sch.name}</p>
+                            <p className="text-[8px] text-slate-500 font-mono">{sch.expectedClockIn} - {sch.expectedClockOut}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal - Create/Edit Work Schedule */}
       {isModalOpen && (
@@ -441,8 +596,52 @@ export default function WorkSchedulesPage() {
                       className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500/20"
                     />
                   </div>
+                  </div>
+
+                  {/* Geofencing Fields */}
+                  <div className="pt-4 border-t border-slate-800 space-y-4 animate-fadeIn">
+                    <h4 className="text-sm font-bold text-white">Cerca Geográfica (Geofencing)</h4>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-400 uppercase">Latitude</label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="-23.55052"
+                          value={formData.latitude}
+                          onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+                          className="block w-full px-4 py-2 rounded-lg bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-400 uppercase">Longitude</label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="-46.633308"
+                          value={formData.longitude}
+                          onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+                          className="block w-full px-4 py-2 rounded-lg bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-slate-400 uppercase">Raio Limite (metros)</label>
+                      <input
+                        type="number"
+                        placeholder="200"
+                        value={formData.radiusMeters}
+                        onChange={(e) => setFormData({ ...formData, radiusMeters: e.target.value })}
+                        className="block w-full px-4 py-2 rounded-lg bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono"
+                      />
+                      <p className="text-[10px] text-slate-500 leading-normal">
+                        Raio de tolerância para validar a resposta do check-in remoto. Se o colaborador responder fora do perímetro, a ocorrência correspondente indicará o desvio.
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
 
               <div className="pt-6 border-t border-slate-800 flex items-center justify-end gap-3">
                 <button

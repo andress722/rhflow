@@ -5,6 +5,7 @@ import { requireRole } from '../lib/auth-middleware';
 import { CompanySettingsService } from '../services/company-settings.service';
 import { PlanLimitsService } from '../services/plan-limits.service';
 import { UsageService } from '../services/usage.service';
+import { AfdService } from '../services/afd.service';
 
 
 const reportQuerySchema = z.object({
@@ -258,6 +259,49 @@ export default async function reportsRoutes(fastify: FastifyInstance) {
         error: {
           code: 'SERVER_ERROR',
           message: err.message || 'Erro ao exportar relatório operacional.',
+        },
+      });
+    }
+  });
+
+  // GET /api/reports/afd-export (MTE Portaria 671 compliant AFD log export)
+  fastify.get('/reports/afd-export', async (request, reply) => {
+    const { companyId, role } = request.user;
+
+    if (!['ADMIN', 'HR'].includes(role)) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Acesso restrito para administradores e RH.' },
+      });
+    }
+
+    const { from, to } = request.query as { from: string; to: string };
+    if (!from || !to) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Período (from, to) é obrigatório.' },
+      });
+    }
+
+    try {
+      const afdText = await AfdService.generateAfd({ companyId, dateFrom: from, dateTo: to });
+      
+      reply.header('Content-Type', 'text/plain; charset=utf-8');
+      reply.header('Content-Disposition', `attachment; filename=AFD_Portaria671_${from}_${to}.txt`);
+      reply.header('X-Compliance-Metadata', JSON.stringify({
+        format: "AFD",
+        layoutVersion: "Portaria 671 MTE",
+        generatedAt: new Date().toISOString(),
+        regulatoryValidationStatus: "PENDING_EXTERNAL_VALIDATION"
+      }));
+      
+      return reply.status(200).send(afdText);
+    } catch (err: any) {
+      return reply.status(500).send({
+        success: false,
+        error: {
+          code: 'SERVER_ERROR',
+          message: err.message || 'Erro ao exportar arquivo AFD.',
         },
       });
     }

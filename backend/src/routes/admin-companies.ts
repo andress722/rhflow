@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { prisma } from '../lib/prisma';
 import { hashPassword } from '../lib/crypto';
 import { requireRole } from '../lib/auth-middleware';
+import { CustomerSuccessService } from '../services/customer-success.service';
 
 const onboardSchema = z.object({
   company: z.object({
@@ -490,6 +491,121 @@ export default async function adminCompaniesRoutes(fastify: FastifyInstance) {
           code: 'SERVER_ERROR',
           message: err.message || 'Erro ao reativar empresa.',
         },
+      });
+    }
+  });
+
+  // GET /api/admin/go-live/readiness/:companyId
+  fastify.get('/admin/go-live/readiness/:companyId', async (request, reply) => {
+    try {
+      const { companyId } = request.params as { companyId: string };
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        include: {
+          subscription: { include: { plan: true } },
+          settings: true,
+          whatsappChannel: true,
+        }
+      });
+
+      if (!company) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Empresa não encontrada.',
+          }
+        });
+      }
+
+      const adminUser = await prisma.user.findFirst({
+        where: { companyId, role: 'ADMIN', isActive: true }
+      });
+
+      const activeEmployees = await prisma.employee.count({
+        where: { companyId, status: 'ACTIVE' }
+      });
+
+      const schedulesConfigured = await prisma.workSchedule.count({
+        where: { companyId, isActive: true }
+      });
+
+      const managersAssigned = await prisma.employee.count({
+        where: { companyId, managerUserId: { not: null } }
+      });
+
+      const whatsappStatus = company.whatsappChannel?.status || 'DISCONNECTED';
+      const remoteCheckinEnabled = company.settings?.enableRemoteCheckin ?? true;
+
+      // Plan limits check
+      const maxEmployees = company.subscription?.plan?.maxEmployees ?? 5;
+      const planLimitsOK = activeEmployees <= maxEmployees;
+
+      // Onboarding score calculation
+      let onboardingPoints = 0;
+      if (adminUser) onboardingPoints += 20;
+      if (activeEmployees > 0) onboardingPoints += 20;
+      if (schedulesConfigured > 0) onboardingPoints += 20;
+      if (company.whatsappChannel && company.whatsappChannel.status === 'CONNECTED') onboardingPoints += 20;
+      if (company.subscription) onboardingPoints += 20;
+      const onboardingScore = onboardingPoints;
+
+      // Health score calculation
+      const healthData = await CustomerSuccessService.calculateCompanyHealth(companyId);
+      const healthScore = healthData.healthScore;
+
+      // Billing configured
+      const billingConfigured = company.subscription?.billingStatus !== 'TRIAL' && (company.subscription?.contractedAmountCents ?? 0) > 0;
+
+      const blockingIssues: string[] = [];
+      const warnings: string[] = [];
+
+      if (!company.isActive) blockingIssues.push('A empresa está inativa no sistema.');
+      if (!adminUser) blockingIssues.push('Nenhum usuário administrador ativo configurado.');
+      if (activeEmployees === 0) blockingIssues.push('Nenhum funcionário ativo cadastrado.');
+      if (schedulesConfigured === 0) blockingIssues.push('Nenhuma jornada de trabalho (escala) ativa configurada.');
+
+      if (whatsappStatus !== 'CONNECTED' && whatsappStatus !== 'SIMULATION') {
+        warnings.push('WhatsApp desconectado (envios inativos).');
+      }
+      if (!remoteCheckinEnabled) {
+        warnings.push('Módulo de check-in remoto desabilitado nas configurações.');
+      }
+      if (!planLimitsOK) {
+        blockingIssues.push(`Limite de funcionários do plano excedido (${activeEmployees}/${maxEmployees}).`);
+      }
+      if (!billingConfigured) {
+        warnings.push('Faturamento manual pendente de configuração comercial.');
+      }
+
+      const goLiveReady = blockingIssues.length === 0;
+
+      return reply.status(200).send({
+        success: true,
+        data: {
+          companyActive: company.isActive,
+          adminUserExists: !!adminUser,
+          activeEmployees,
+          schedulesConfigured: schedulesConfigured > 0,
+          managersAssigned: managersAssigned > 0,
+          whatsappStatus,
+          remoteCheckinEnabled,
+          planLimitsOK,
+          onboardingScore,
+          healthScore,
+          billingConfigured,
+          blockingIssues,
+          warnings,
+          goLiveReady,
+        }
+      });
+    } catch (err: any) {
+      return reply.status(500).send({
+        success: false,
+        error: {
+          code: 'SERVER_ERROR',
+          message: err.message || 'Erro ao processar diagnóstico de go-live.',
+        }
       });
     }
   });

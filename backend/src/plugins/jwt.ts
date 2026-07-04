@@ -33,7 +33,13 @@ export default fp(async (fastify) => {
 
   fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      await request.jwtVerify();
+      if (request.query && (request.query as any).token) {
+        const token = (request.query as any).token;
+        const decoded = fastify.jwt.verify(token);
+        request.user = decoded as any;
+      } else {
+        await request.jwtVerify();
+      }
 
       // Consult the User in the DB to check real status (isActive and mustChangePassword)
       if (request.user && request.user.sub) {

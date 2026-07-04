@@ -75,11 +75,21 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const isIpBlocked = await RateLimiter.isBlocked(ipBruteKey);
     const isEmailBlocked = await RateLimiter.isBlocked(emailBruteKey);
 
+    const getSystemCompanyId = async (): Promise<string> => {
+      const platformCompany = await prisma.company.findFirst({
+        where: { name: 'PresençaFlow Plataforma' }
+      });
+      if (platformCompany) return platformCompany.id;
+      const anyCompany = await prisma.company.findFirst();
+      return anyCompany?.id || 'SYSTEM';
+    };
+
     if (isIpBlocked || isEmailBlocked) {
+      const systemCompanyId = await getSystemCompanyId();
       // Do not log plain password or token. Log masked email
       await prisma.auditLog.create({
         data: {
-          companyId: 'SYSTEM', // Fallback to system audit since user is blocked
+          companyId: systemCompanyId,
           action: 'LOGIN_FAILED',
           entity: 'User',
           metadata: {
@@ -110,9 +120,10 @@ export default async function authRoutes(fastify: FastifyInstance) {
       await RateLimiter.increment(emailBruteKey);
       await RateLimiter.increment(ipBruteKey);
 
+      const systemCompanyId = await getSystemCompanyId();
       await prisma.auditLog.create({
         data: {
-          companyId: user?.companyId || 'SYSTEM',
+          companyId: user?.companyId || systemCompanyId,
           userId: user?.id || null,
           action: 'LOGIN_FAILED',
           entity: 'User',

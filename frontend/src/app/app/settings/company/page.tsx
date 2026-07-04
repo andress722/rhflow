@@ -18,6 +18,16 @@ export default function CompanySettingsPage() {
     whatsappCheckinMessage: '',
     whatsappNotRespondedMessage: '',
     whatsappManagerAlertMessage: '',
+    enableFacialRecognition: false,
+  });
+
+  const [biometricConfig, setBiometricConfig] = useState<any>({
+    enabled: false,
+    purpose: '',
+    legalBasisDeclared: '',
+    retentionDays: 30,
+    alternativeMethodAvailable: true,
+    policyVersion: '1.0',
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -53,9 +63,15 @@ export default function CompanySettingsPage() {
           whatsappCheckinMessage: res.data.whatsappCheckinMessage ?? '',
           whatsappNotRespondedMessage: res.data.whatsappNotRespondedMessage ?? '',
           whatsappManagerAlertMessage: res.data.whatsappManagerAlertMessage ?? '',
+          enableFacialRecognition: res.data.enableFacialRecognition ?? false,
         });
       } else {
         setError(res.error?.message || 'Erro ao carregar configurações da empresa.');
+      }
+
+      const bioRes: any = await api.get('/admin/compliance/biometrics/config');
+      if (bioRes.success && bioRes.data) {
+        setBiometricConfig(bioRes.data);
       }
     } catch (err) {
       setError('Erro de conexão com o servidor.');
@@ -80,10 +96,26 @@ export default function CompanySettingsPage() {
         whatsappManagerAlertMessage: settings.whatsappManagerAlertMessage || null,
       };
 
+      if (settings.enableFacialRecognition) {
+        if (!biometricConfig.purpose || !biometricConfig.legalBasisDeclared) {
+          setError('A finalidade e a base legal LGPD são obrigatórias para habilitar o Reconhecimento Facial.');
+          setIsSaving(false);
+          return;
+        }
+        await api.post('/admin/compliance/biometrics/config', {
+          ...biometricConfig,
+          enabled: true,
+        });
+      } else {
+        await api.post('/admin/compliance/biometrics/config', {
+          ...biometricConfig,
+          enabled: false,
+        });
+      }
+
       const res = await api.patch('/company-settings', payload);
       if (res.success) {
         setSuccessMsg('Configurações da empresa salvas com sucesso!');
-        // Scroll to top to see success message
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         setError(res.error?.message || 'Erro ao salvar configurações.');
@@ -199,6 +231,79 @@ export default function CompanySettingsPage() {
                   className="w-4 h-4 rounded text-indigo-600 bg-slate-900 border-slate-800 focus:ring-indigo-500 focus:ring-offset-slate-900 mt-1 cursor-pointer"
                 />
               </div>
+
+              {/* Reconhecimento Facial */}
+              <div className="flex flex-col gap-4 p-4 rounded-lg bg-slate-950/50 border border-slate-800/40 col-span-2">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-bold text-slate-200">Reconhecimento Facial via IA</label>
+                    <p className="text-xs text-slate-500">Exige biometria facial para confirmar identidade na marcação remota (Requer consentimento LGPD).</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.enableFacialRecognition}
+                    onChange={(e) => setSettings({ ...settings, enableFacialRecognition: e.target.checked })}
+                    className="w-4 h-4 rounded text-indigo-600 bg-slate-900 border-slate-800 focus:ring-indigo-500 focus:ring-offset-slate-900 mt-1 cursor-pointer"
+                  />
+                </div>
+
+                {settings.enableFacialRecognition && (
+                  <div className="pt-4 border-t border-slate-800/60 space-y-4 animate-fadeIn">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                          Finalidade do Tratamento (Purpose)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Prevenção a fraudes e autenticação de ponto"
+                          value={biometricConfig.purpose}
+                          onChange={(e) => setBiometricConfig({ ...biometricConfig, purpose: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-850 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                          Base Legal Declarada
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Consentimento do Titular"
+                          value={biometricConfig.legalBasisDeclared}
+                          onChange={(e) => setBiometricConfig({ ...biometricConfig, legalBasisDeclared: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-850 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                          Retenção de Selfie / Biometria (Dias)
+                        </label>
+                        <input
+                          type="number"
+                          value={biometricConfig.retentionDays}
+                          onChange={(e) => setBiometricConfig({ ...biometricConfig, retentionDays: parseInt(e.target.value, 10) })}
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-850 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2.5 p-3 rounded-lg border border-slate-850 bg-slate-950/40">
+                        <input
+                          type="checkbox"
+                          checked={biometricConfig.alternativeMethodAvailable}
+                          onChange={(e) => setBiometricConfig({ ...biometricConfig, alternativeMethodAvailable: e.target.checked })}
+                          className="rounded bg-slate-900 border-slate-850 text-indigo-650 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-200">Disponibilizar Método Alternativo</p>
+                          <p className="text-[9px] text-slate-500 mt-0.5">Permite bater ponto sem biometria em caso de falha técnica.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -285,20 +390,35 @@ export default function CompanySettingsPage() {
             </div>
 
             {/* Help Alert on Placeholders */}
-            <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-2">
+            <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-3">
               <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                 <HelpCircle className="w-4 h-4 text-indigo-400 shrink-0" />
                 Como utilizar variáveis (Placeholders)?
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Você pode utilizar os placeholders abaixo em qualquer parte do texto. Eles serão substituídos automaticamente em tempo de execução:
+                Você pode utilizar as variáveis abaixo em qualquer parte dos textos das mensagens. Elas serão substituídas dinamicamente pelos dados reais correspondentes no momento do envio:
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 font-mono text-[10px]">
-                <div className="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-center" title="Nome do funcionário">{"{{employeeName}}"}</div>
-                <div className="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-center" title="Nome da empresa">{"{{companyName}}"}</div>
-                <div className="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-center" title="Data civil do check-in">{"{{date}}"}</div>
-                <div className="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-center" title="Nome do gestor do funcionário">{"{{managerName}}"}</div>
-                <div className="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-center" title="Minutos de tolerância">{"{{graceMinutes}}"}</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+                <div className="p-2.5 rounded bg-slate-900/60 border border-slate-800/60 flex flex-col gap-1">
+                  <span className="font-mono text-[10px] font-bold text-indigo-400">{"{{employeeName}}"}</span>
+                  <span className="text-[10px] text-slate-400 leading-normal">Nome completo do funcionário.</span>
+                </div>
+                <div className="p-2.5 rounded bg-slate-900/60 border border-slate-800/60 flex flex-col gap-1">
+                  <span className="font-mono text-[10px] font-bold text-indigo-400">{"{{companyName}}"}</span>
+                  <span className="text-[10px] text-slate-400 leading-normal">Nome fantasia/legal da empresa cadastrado.</span>
+                </div>
+                <div className="p-2.5 rounded bg-slate-900/60 border border-slate-800/60 flex flex-col gap-1">
+                  <span className="font-mono text-[10px] font-bold text-indigo-400">{"{{date}}"}</span>
+                  <span className="text-[10px] text-slate-400 leading-normal">Data civil correspondente ao check-in.</span>
+                </div>
+                <div className="p-2.5 rounded bg-slate-900/60 border border-slate-800/60 flex flex-col gap-1">
+                  <span className="font-mono text-[10px] font-bold text-indigo-400">{"{{managerName}}"}</span>
+                  <span className="text-[10px] text-slate-400 leading-normal">Nome do gestor responsável atribuído ao funcionário.</span>
+                </div>
+                <div className="p-2.5 rounded bg-slate-900/60 border border-slate-800/60 flex flex-col gap-1">
+                  <span className="font-mono text-[10px] font-bold text-indigo-400">{"{{graceMinutes}}"}</span>
+                  <span className="text-[10px] text-slate-400 leading-normal">Tempo limite em minutos tolerado para a resposta.</span>
+                </div>
               </div>
             </div>
 

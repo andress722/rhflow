@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import {
   Building2,
@@ -21,6 +22,11 @@ export default function AdminCompaniesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Diagnostics states
+  const [diagnosingCompanyId, setDiagnosingCompanyId] = useState<string | null>(null);
+  const [diagnosticsData, setDiagnosticsData] = useState<any | null>(null);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
 
   // Onboard form modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -86,6 +92,26 @@ export default function AdminCompaniesPage() {
       }
     } catch (err) {
       alert('Erro de rede ao reativar empresa.');
+    }
+  };
+
+  const handleDiagnose = async (id: string) => {
+    setDiagnosingCompanyId(id);
+    setDiagnosticsLoading(true);
+    setDiagnosticsData(null);
+    try {
+      const response = await api.get(`/admin/go-live/readiness/${id}`);
+      if (response.success) {
+        setDiagnosticsData(response.data);
+      } else {
+        alert(response.error?.message || 'Erro ao obter diagnóstico de go-live.');
+        setDiagnosingCompanyId(null);
+      }
+    } catch (err) {
+      alert('Erro de rede ao buscar diagnóstico.');
+      setDiagnosingCompanyId(null);
+    } finally {
+      setDiagnosticsLoading(false);
     }
   };
 
@@ -317,7 +343,25 @@ export default function AdminCompaniesPage() {
                           )}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right flex justify-end gap-2">
+                        <Link
+                          href={`/app/admin/pilot-feedback?companyId=${c.id}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-950 hover:bg-slate-850 text-slate-350 border border-slate-800 text-xs font-semibold transition-all cursor-pointer"
+                        >
+                          Feedbacks
+                        </Link>
+                        <Link
+                          href={`/app/admin/pilot-backlog?companyId=${c.id}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-950 hover:bg-slate-850 text-slate-350 border border-slate-800 text-xs font-semibold transition-all cursor-pointer"
+                        >
+                          Backlog
+                        </Link>
+                        <button
+                          onClick={() => handleDiagnose(c.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-indigo-950/20 hover:bg-indigo-950/40 text-indigo-400 border border-indigo-900/30 hover:border-indigo-800/50 text-xs font-semibold transition-all cursor-pointer"
+                        >
+                          Diagnóstico
+                        </button>
                         {c.isActive ? (
                           <button
                             onClick={() => handleDeactivate(c.id)}
@@ -478,6 +522,174 @@ export default function AdminCompaniesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Diagnóstico Go-Live Modal */}
+      {diagnosingCompanyId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-indigo-500" />
+                Diagnóstico de Prontidão Go-Live
+              </h2>
+              <button
+                onClick={() => setDiagnosingCompanyId(null)}
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+              {diagnosticsLoading ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-3">
+                  <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-sm text-slate-400">Analisando infraestrutura de banco e configurações...</span>
+                </div>
+              ) : diagnosticsData ? (
+                <div className="space-y-6">
+                  {/* Status header */}
+                  <div className="flex items-center justify-between bg-slate-950/40 p-4 border border-slate-800 rounded-xl">
+                    <div>
+                      <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Status da Implantação</span>
+                      {diagnosticsData.goLiveReady ? (
+                        <span className="text-emerald-400 font-bold text-lg flex items-center gap-1.5 mt-0.5">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-450" />
+                          <span>PRONTO PARA GO-LIVE</span>
+                        </span>
+                      ) : (
+                        <span className="text-red-400 font-bold text-lg flex items-center gap-1.5 mt-0.5">
+                          <XCircle className="w-5 h-5 text-red-450" />
+                          <span>BLOQUEADO OPERACIONAL</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Score Onboarding</span>
+                      <span className="text-indigo-400 font-extrabold text-2xl block mt-0.5">{diagnosticsData.onboardingScore}%</span>
+                    </div>
+                  </div>
+
+                  {/* Checklist items */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-slate-950/20 border border-slate-850 p-4 rounded-xl space-y-3">
+                      <h3 className="text-sm font-bold text-slate-200">Requisitos Mínimos (GO)</h3>
+                      <div className="space-y-2 text-xs">
+                        <div className="flex justify-between items-center py-1 border-b border-slate-850">
+                          <span className="text-slate-450">Cadastro da Empresa Ativo</span>
+                          {diagnosticsData.companyActive ? (
+                            <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Sim</span>
+                          ) : (
+                            <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Não</span>
+                          )}
+                        </div>
+                        <div className="flex justify-between items-center py-1 border-b border-slate-850">
+                          <span className="text-slate-450">Usuário Administrador Ativo</span>
+                          {diagnosticsData.adminUserExists ? (
+                            <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Configurado</span>
+                          ) : (
+                            <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Ausente</span>
+                          )}
+                        </div>
+                        <div className="flex justify-between items-center py-1 border-b border-slate-850">
+                          <span className="text-slate-450">Colaboradores Cadastrados</span>
+                          {diagnosticsData.activeEmployees > 0 ? (
+                            <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> {diagnosticsData.activeEmployees} ativos</span>
+                          ) : (
+                            <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Nenhum</span>
+                          )}
+                        </div>
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-slate-450">Jornadas/Escalas de Trabalho</span>
+                          {diagnosticsData.schedulesConfigured ? (
+                            <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Ativas</span>
+                          ) : (
+                            <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Ausente</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-950/20 border border-slate-850 p-4 rounded-xl space-y-3">
+                      <h3 className="text-sm font-bold text-slate-200">Recomendações e Integrações</h3>
+                      <div className="space-y-2 text-xs">
+                        <div className="flex justify-between items-center py-1 border-b border-slate-850">
+                          <span className="text-slate-450">Conexão WhatsApp</span>
+                          <span className={`${diagnosticsData.whatsappStatus === 'CONNECTED' || diagnosticsData.whatsappStatus === 'SIMULATION' ? 'text-emerald-400' : 'text-amber-400'} font-semibold`}>
+                            {diagnosticsData.whatsappStatus}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center py-1 border-b border-slate-850">
+                          <span className="text-slate-450">Gestores Associados</span>
+                          {diagnosticsData.managersAssigned ? (
+                            <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Vinculados</span>
+                          ) : (
+                            <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Nenhum</span>
+                          )}
+                        </div>
+                        <div className="flex justify-between items-center py-1 border-b border-slate-850">
+                          <span className="text-slate-450">Faturamento Manual Comercial</span>
+                          {diagnosticsData.billingConfigured ? (
+                            <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Definido</span>
+                          ) : (
+                            <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Pendente</span>
+                          )}
+                        </div>
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-slate-450">Score de Saúde da Empresa</span>
+                          <span className="text-indigo-400 font-bold">{diagnosticsData.healthScore}% (7d)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Blocking issues list */}
+                  {diagnosticsData.blockingIssues.length > 0 && (
+                    <div className="bg-red-950/20 border border-red-900/40 rounded-xl p-4 space-y-2">
+                      <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>Impedimentos Críticos de Go-Live ({diagnosticsData.blockingIssues.length})</span>
+                      </h4>
+                      <ul className="list-disc pl-5 text-xs text-red-300/80 space-y-1">
+                        {diagnosticsData.blockingIssues.map((issue: string, idx: number) => (
+                          <li key={idx}>{issue}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Warnings list */}
+                  {diagnosticsData.warnings.length > 0 && (
+                    <div className="bg-amber-950/20 border border-amber-900/40 rounded-xl p-4 space-y-2">
+                      <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>Alertas e Recomendações de Qualidade ({diagnosticsData.warnings.length})</span>
+                      </h4>
+                      <ul className="list-disc pl-5 text-xs text-amber-300/80 space-y-1">
+                        {diagnosticsData.warnings.map((warn: string, idx: number) => (
+                          <li key={idx}>{warn}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-slate-500">Falha ao buscar telemetria de diagnóstico.</div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/40 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setDiagnosingCompanyId(null)}
+                className="px-4 py-2 rounded bg-indigo-650 hover:bg-indigo-600 text-white text-xs font-semibold transition-all cursor-pointer"
+              >
+                Fechar Diagnóstico
+              </button>
+            </div>
           </div>
         </div>
       )}

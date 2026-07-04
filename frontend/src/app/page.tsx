@@ -19,22 +19,22 @@ import {
 } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'PresençaFlow RH — Faltas, atrasos e atestados pelo WhatsApp',
-  description: 'Automatize faltas, atrasos, atestados e ponto esquecido pelo WhatsApp, com ocorrências, evidências e relatórios para RH e gestores.',
+  title: 'PresençaFlow RH — Gestão de Ocorrências, Atestados e Presença',
+  description: 'Centralize a gestão de faltas, atrasos, atestados médicos e ocorrências para equipes presenciais, híbridas ou remotas sem depender de planilhas.',
   alternates: {
     canonical: 'https://presencaflow.com',
   },
   openGraph: {
-    title: 'PresençaFlow RH — Faltas, atrasos e atestados pelo WhatsApp',
-    description: 'Automatize faltas, atrasos, atestados e ponto esquecido pelo WhatsApp, com ocorrências, evidências e relatórios para RH e gestores.',
+    title: 'PresençaFlow RH — Gestão de Ocorrências, Atestados e Presença',
+    description: 'Centralize a gestão de faltas, atrasos, atestados médicos e ocorrências para equipes presenciais, híbridas ou remotas sem depender de planilhas.',
     url: 'https://presencaflow.com',
     siteName: 'PresençaFlow RH',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'PresençaFlow RH — Faltas, atrasos e atestados pelo WhatsApp',
-    description: 'Automatize faltas, atrasos, atestados e ponto esquecido pelo WhatsApp, com ocorrências, evidências e relatórios para RH e gestores.',
+    title: 'PresençaFlow RH — Gestão de Ocorrências, Atestados e Presença',
+    description: 'Centralize a gestão de faltas, atrasos, atestados médicos e ocorrências para equipes presenciais, híbridas ou remotas sem depender de planilhas.',
   },
 };
 
@@ -52,8 +52,8 @@ export default function LandingPage() {
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
           <a href="#problema" className="hover:text-slate-200 transition-colors">O Problema</a>
           <a href="#solucao" className="hover:text-slate-200 transition-colors">A Solução</a>
+          <a href="#canais" className="hover:text-slate-200 transition-colors">Canais</a>
           <a href="#como-funciona" className="hover:text-slate-200 transition-colors">Como Funciona</a>
-          <a href="#alinhamento" className="hover:text-slate-200 transition-colors">Para Quem É</a>
           <a href="#planos" className="hover:text-slate-200 transition-colors">Planos</a>
           <a href="#seguranca" className="hover:text-slate-200 transition-colors">Segurança</a>
         </nav>
@@ -74,34 +74,125 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-6 md:px-12 max-w-7xl mx-auto flex flex-col items-center text-center space-y-8">
+      <section className="pt-32 pb-16 px-6 md:px-12 max-w-7xl mx-auto flex flex-col items-center text-center space-y-8">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 text-xs font-semibold">
           <Zap className="w-3.5 h-3.5" />
-          <span>Onboarding Simplificado via WhatsApp</span>
+          <span>Gestão Operacional de RH</span>
         </div>
         <h1 className="text-4xl md:text-6xl font-extrabold text-white tracking-tight leading-tight max-w-4xl">
-          Controle faltas, atrasos, atestados e ponto esquecido pelo{' '}
-          <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
-            WhatsApp.
-          </span>
+          Controle faltas, atrasos, atestados e presença sem depender de planilhas.
         </h1>
-        <p className="text-slate-400 text-base md:text-lg max-w-2xl leading-relaxed">
-          O PresençaFlow automatiza a confirmação de presença remota e híbrida de seus colaboradores, gerencia ocorrências instantaneamente e homologa atestados de forma ágil e centralizada.
+        <p className="text-slate-400 text-base md:text-lg max-w-3xl leading-relaxed">
+          O PresençaFlow centraliza ocorrências, check-ins, documentos médicos e relatórios para RHs que precisam acompanhar equipes presenciais, híbridas ou remotas com mais clareza.
         </p>
         <div className="flex flex-col sm:flex-row items-center gap-4 pt-4">
           <Link
             href="/pilot"
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold rounded-lg transition-all shadow-lg shadow-indigo-600/20"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold rounded-lg transition-all shadow-lg shadow-indigo-600/20 cursor-pointer"
           >
-            <span>Solicitar Piloto</span>
+            <span>Solicitar piloto</span>
             <ArrowRight className="w-4 h-4" />
           </Link>
-          <Link
-            href="/pilot"
-            className="w-full sm:w-auto px-6 py-3.5 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-slate-300 hover:text-white font-semibold rounded-lg border border-slate-800 transition-colors"
+          <a
+            href="#como-funciona"
+            className="w-full sm:w-auto px-6 py-3.5 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-slate-300 hover:text-white font-semibold rounded-lg border border-slate-800 transition-colors cursor-pointer"
           >
-            Agendar Demonstração
-          </Link>
+            Ver como funciona
+          </a>
+        </div>
+      </section>
+
+      {/* Antes vs Depois Section */}
+      <section className="py-16 bg-slate-950 border-t border-slate-900 px-6 md:px-12">
+        <div className="max-w-6xl mx-auto space-y-10">
+          <div className="text-center space-y-3">
+            <h2 className="text-xl md:text-2xl font-bold text-white uppercase tracking-wider text-indigo-400">Antes vs Depois</h2>
+            <p className="text-slate-400 text-xs md:text-sm">A transformação da sua rotina operacional de gestão de pessoal.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Antes */}
+            <div className="p-6 bg-slate-900/30 border border-slate-850 rounded-xl space-y-4">
+              <h3 className="text-sm font-bold text-red-400 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                Como é hoje (Sem o PresençaFlow)
+              </h3>
+              <ul className="space-y-3 text-xs md:text-sm text-slate-400 leading-relaxed">
+                <li className="flex items-start gap-2.5">
+                  <span className="text-red-500 font-bold">✕</span>
+                  <span><strong>Mensagens soltas:</strong> Cobranças manuais via WhatsApp pessoal de gestores, gerando conversas difíceis de rastrear.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-red-500 font-bold">✕</span>
+                  <span><strong>Planilhas paralelas:</strong> Atestados perdidos em caixas de e-mail e planilhas de controle desatualizadas.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-red-500 font-bold">✕</span>
+                  <span><strong>Cobranças manuais:</strong> RH perde horas verificando quem esqueceu de registrar o ponto ou justificar faltas.</span>
+                </li>
+              </ul>
+            </div>
+            {/* Depois */}
+            <div className="p-6 bg-indigo-950/20 border border-indigo-900/40 rounded-xl space-y-4">
+              <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                Como fica (Com o PresençaFlow)
+              </h3>
+              <ul className="space-y-3 text-xs md:text-sm text-slate-350 leading-relaxed">
+                <li className="flex items-start gap-2.5">
+                  <span className="text-emerald-500 font-bold">✓</span>
+                  <span><strong>Ocorrências centralizadas:</strong> Faltas e atrasos consolidados automaticamente no painel principal.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-emerald-500 font-bold">✓</span>
+                  <span><strong>Status claro e evidências:</strong> Atestados médicos homologados com arquivos anexos organizados.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-emerald-500 font-bold">✓</span>
+                  <span><strong>Relatório gerado:</strong> Fechamento operacional e auditoria prontos para a folha em poucos segundos.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Rotina de RH na Prática Section */}
+      <section className="py-16 bg-slate-900/20 border-t border-slate-900 px-6 md:px-12">
+        <div className="max-w-6xl mx-auto space-y-10">
+          <div className="text-center space-y-3">
+            <h2 className="text-xl md:text-2xl font-bold text-white uppercase tracking-wider text-indigo-400">Rotina de RH na Prática</h2>
+            <p className="text-slate-400 text-xs md:text-sm">Veja o ciclo operacional simples do início ao relatório final.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-slate-900 border border-slate-850 p-5 rounded-xl space-y-3 relative">
+              <div className="text-xs font-bold text-slate-500">ETAPA 1</div>
+              <h4 className="text-sm font-bold text-white">Funcionário avisou falta</h4>
+              <p className="text-slate-400 text-[11px] leading-relaxed">
+                O colaborador informa a ausência ou responde ao check-in remoto enviando sua justificativa em segundos.
+              </p>
+            </div>
+            <div className="bg-slate-900 border border-slate-850 p-5 rounded-xl space-y-3 relative">
+              <div className="text-xs font-bold text-slate-500">ETAPA 2</div>
+              <h4 className="text-sm font-bold text-white">RH recebeu atestado</h4>
+              <p className="text-slate-400 text-[11px] leading-relaxed">
+                O documento médico chega direto na fila de pendências para validação do RH, sem misturar com conversas pessoais.
+              </p>
+            </div>
+            <div className="bg-slate-900 border border-slate-850 p-5 rounded-xl space-y-3 relative">
+              <div className="text-xs font-bold text-slate-500">ETAPA 3</div>
+              <h4 className="text-sm font-bold text-white">Gestor foi notificado</h4>
+              <p className="text-slate-400 text-[11px] leading-relaxed">
+                Alertas in-app ou preferências pré-configuradas mantêm os gestores cientes das ausências de sua equipe em tempo real.
+              </p>
+            </div>
+            <div className="bg-slate-900 border border-slate-850 p-5 rounded-xl space-y-3 relative">
+              <div className="text-xs font-bold text-slate-500">ETAPA 4</div>
+              <h4 className="text-sm font-bold text-white">Relatório gerado</h4>
+              <p className="text-slate-400 text-[11px] leading-relaxed">
+                Exportação de todas as ocorrências validadas e pacotes de evidências prontos para fechamento da folha.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -155,7 +246,7 @@ export default function LandingPage() {
         <div className="text-center max-w-2xl mx-auto space-y-3">
           <h2 className="text-2xl md:text-3xl font-extrabold text-white">Como o PresençaFlow resolve isso?</h2>
           <p className="text-slate-400 text-sm md:text-base">
-            Uma abordagem simplificada, direta e automatizada que integra a comunicação do funcionário com a gestão corporativa.
+            Uma abordagem de centralização operacional que reduz o trabalho manual e gera relatórios confiáveis.
           </p>
           <div className="pt-2">
             <a href="#como-funciona" className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold underline">Ver como funciona</a>
@@ -166,9 +257,9 @@ export default function LandingPage() {
             <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-lg w-fit">
               <MessageSquare className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-white">WhatsApp-First</h3>
+            <h3 className="text-base font-bold text-white">Canais Integrados</h3>
             <p className="text-slate-400 text-xs md:text-sm leading-relaxed">
-              O funcionário responde ao check-in diário com um clique e faz o upload de seus atestados médicos diretamente pelo WhatsApp. Sem precisar baixar aplicativos pesados.
+              O funcionário responde ao check-in diário e envia documentos com facilidade. Sem necessidade de instalar novos aplicativos complexos ou pesados.
             </p>
           </div>
 
@@ -194,6 +285,56 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Canais Section */}
+      <section id="canais" className="py-20 bg-slate-900/40 border-t border-slate-900/80 px-6 md:px-12">
+        <div className="max-w-6xl mx-auto space-y-12">
+          <div className="text-center max-w-2xl mx-auto space-y-3">
+            <h2 className="text-2xl md:text-3xl font-extrabold text-white">Canais flexíveis para a realidade da empresa</h2>
+            <p className="text-slate-400 text-sm md:text-base leading-relaxed">
+              O PresençaFlow pode operar com integração oficial do WhatsApp, modo assistido no piloto ou conectores homologados conforme o nível de risco e maturidade da empresa.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-3">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>WhatsApp Oficial Meta</span>
+              </h4>
+              <p className="text-slate-450 text-xs leading-relaxed">
+                Integração oficial via Cloud API da Meta. Garante estabilidade total, conformidade e entrega segura de mensagens.
+              </p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-3">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Provedor/BSP Oficial</span>
+              </h4>
+              <p className="text-slate-455 text-xs leading-relaxed">
+                Conectores homologados por parceiros oficiais da Meta (BSP) para empresas que exigem SLA corporativo.
+              </p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-3">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span>Modo Assistido (Piloto)</span>
+              </h4>
+              <p className="text-slate-455 text-xs leading-relaxed">
+                Simula fluxos de envio e resposta diretamente dentro da plataforma, ideal para homologação sem custos adicionais.
+              </p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-3">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>Conectores Não Oficiais</span>
+              </h4>
+              <p className="text-slate-455 text-xs leading-relaxed">
+                Suporte a soluções baseadas em WhatsApp Web apenas com aceite explícito de termos de risco pelo cliente.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Como funciona Section */}
       <section id="como-funciona" className="py-20 bg-slate-900/30 border-y border-slate-900/60 px-6 md:px-12">
         <div className="max-w-6xl mx-auto space-y-12">
@@ -209,8 +350,8 @@ export default function LandingPage() {
             </div>
             <div className="bg-slate-950 border border-slate-800 p-5 rounded-xl space-y-3 text-center">
               <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-bold mx-auto border border-indigo-500/20 text-xs">2</div>
-              <h4 className="text-sm font-bold text-white">Dispare Check-ins</h4>
-              <p className="text-slate-400 text-[11px] leading-relaxed">O sistema envia notificações diárias de verificação pelo canal do WhatsApp conforme a jornada de trabalho.</p>
+              <h4 className="text-sm font-bold text-white">Configure Canais</h4>
+              <p className="text-slate-400 text-[11px] leading-relaxed">Escolha a integração oficial Meta Cloud ou utilize o modo simulado durante o piloto.</p>
             </div>
             <div className="bg-slate-950 border border-slate-800 p-5 rounded-xl space-y-3 text-center">
               <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-bold mx-auto border border-indigo-500/20 text-xs">3</div>
@@ -220,7 +361,7 @@ export default function LandingPage() {
             <div className="bg-slate-950 border border-slate-800 p-5 rounded-xl space-y-3 text-center">
               <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-bold mx-auto border border-indigo-500/20 text-xs">4</div>
               <h4 className="text-sm font-bold text-white">Pronto para a Folha</h4>
-              <p className="text-slate-400 text-[11px] leading-relaxed">Feche a folha do mês exportando o relatório de fechamento operacional sem erros ou retrabalho.</p>
+              <p className="text-slate-400 text-[11px] leading-relaxed">Feche a folha do mês exportando o relatório de fechamento operacional com evidências claras.</p>
             </div>
           </div>
         </div>
@@ -245,7 +386,7 @@ export default function LandingPage() {
             <ul className="space-y-2.5 text-xs text-slate-300">
               <li>• Setor de RH de pequenas e médias empresas procurando agilidade.</li>
               <li>• Clínicas, operações de campo, escritórios e equipes com jornadas híbridas/remotas.</li>
-              <li>• Empresas que gerenciam faltas, atrasos e recebem atestados via canais informais (WhatsApp).</li>
+              <li>• Empresas que precisam reduzir o trabalho manual de planilhas.</li>
               <li>• Gestores de equipe que necessitam de evidências e relatórios simplificados.</li>
             </ul>
           </div>
@@ -297,7 +438,7 @@ export default function LandingPage() {
                 <div className="h-px bg-slate-800"></div>
                 <ul className="space-y-2.5 text-xs text-slate-400">
                   <li>✓ Até 5 funcionários ativos</li>
-                  <li>✓ Check-ins pelo WhatsApp</li>
+                  <li>✓ Modo assistido para piloto</li>
                   <li>✓ Relatórios simplificados</li>
                   <li className="text-slate-600">✕ Módulo de atestados médicos</li>
                 </ul>
@@ -331,72 +472,19 @@ export default function LandingPage() {
             <div className="bg-slate-950 border border-slate-800 p-6 rounded-2xl flex flex-col justify-between space-y-6">
               <div className="space-y-4">
                 <h4 className="text-base font-bold text-slate-100">Enterprise</h4>
-                <p className="text-slate-400 text-xs">Para grandes empresas que necessitam de suporte técnico especializado.</p>
+                <p className="text-slate-400 text-xs">Para grandes volumes e integrações sob demanda.</p>
                 <div className="text-2xl font-bold text-white">Sob Consulta</div>
                 <div className="h-px bg-slate-800"></div>
                 <ul className="space-y-2.5 text-xs text-slate-400">
                   <li>✓ Funcionários ilimitados</li>
-                  <li>✓ Configuração de canal WhatsApp próprio</li>
-                  <li>✓ Exportação de dados e integrações personalizadas</li>
-                  <li>✓ SLA de suporte dedicado</li>
+                  <li>✓ Conector WhatsApp oficial dedicado</li>
+                  <li>✓ Integrações via API personalizadas</li>
+                  <li>✓ Suporte prioritário e SLA dedicado</li>
                 </ul>
               </div>
               <Link href="/pilot" className="w-full text-center py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-lg border border-slate-800 transition-colors">
-                Solicitar Piloto
+                Falar com Vendas
               </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Seguranca Section */}
-      <section id="seguranca" className="py-20 px-6 md:px-12 max-w-6xl mx-auto space-y-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-          <div className="space-y-6">
-            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg w-fit">
-              <Lock className="w-6 h-6" />
-            </div>
-            <h2 className="text-2xl md:text-3xl font-extrabold text-white">Segurança e Privacidade de Dados por Padrão</h2>
-            <p className="text-slate-400 text-sm md:text-base leading-relaxed">
-              Tratamos os dados de seus colaboradores com extremo rigor ético e conformidade técnica. Nosso ecossistema de infraestrutura utiliza criptografia ponta a ponta e rígido controle de isolamento lógico de multi-inquilinos (multi-tenant) para assegurar que apenas usuários autorizados acessem os dados.
-            </p>
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
-                <p className="font-bold text-slate-200">Isolamento Lógico</p>
-                <p className="text-slate-500 mt-1">Garantia técnica de que os dados de uma empresa nunca cruzarão com outra.</p>
-              </div>
-              <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
-                <p className="font-bold text-slate-200">Rastreabilidade</p>
-                <p className="text-slate-500 mt-1">AuditLog persistente que registra ações críticas executadas na plataforma.</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Conformidade Legal & LGPD</span>
-            </h4>
-            <p className="text-slate-400 text-xs leading-relaxed">
-              Em conformidade com as diretrizes da Lei Geral de Proteção de Dados (LGPD):
-            </p>
-            <ul className="space-y-2.5 text-xs text-slate-300">
-              <li className="flex gap-2">
-                <span className="text-indigo-400">✓</span>
-                <span>Armazenamento restrito às finalidades específicas de registro de presença laboral.</span>
-              </li>
-              <li className="flex gap-2">
-                <span className="text-indigo-400">✓</span>
-                <span>Políticas de segurança para solicitação de exclusão ou retificação de dados pessoais.</span>
-              </li>
-              <li className="flex gap-2">
-                <span className="text-indigo-400">✓</span>
-                <span>Mascaramento de identificadores e chaves confidenciais em todos os logs de diagnóstico técnico.</span>
-              </li>
-            </ul>
-            <div className="pt-2 text-xs">
-              <Link href="/privacy" className="text-indigo-400 hover:underline">Políticas de Privacidade</Link>
-              <span className="text-slate-600 mx-2">|</span>
-              <Link href="/terms" className="text-indigo-400 hover:underline">Termos de Uso</Link>
             </div>
           </div>
         </div>
@@ -416,17 +504,17 @@ export default function LandingPage() {
                 <span>O funcionário precisa baixar algum aplicativo no celular?</span>
               </h4>
               <p className="text-slate-400 text-xs md:text-sm pl-6 leading-relaxed">
-                Não. A comunicação é realizada de forma totalmente transparente pelo WhatsApp. O funcionário clica em botões interativos diretamente no aplicativo de conversas que já possui instalado.
+                Não. O preenchimento de justificativas e envios pode ser feito diretamente por canais interativos ou pelo navegador de forma simples e responsiva, sem exigir downloads.
               </p>
             </div>
 
             <div className="p-5 bg-slate-900/80 border border-slate-800 rounded-xl space-y-2">
               <h4 className="text-sm font-bold text-white flex items-center gap-2">
                 <HelpCircle className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span>Como funciona a simulação ou uso do WhatsApp real?</span>
+                <span>Preciso obrigatoriamente da API oficial do WhatsApp?</span>
               </h4>
               <p className="text-slate-400 text-xs md:text-sm pl-6 leading-relaxed">
-                Durante a fase piloto ou teste, o canal é fornecido de forma simulada no próprio sistema ou utilizando chaves de desenvolvimento. Para operação em produção, é possível ativar a API do Meta Cloud oficial.
+                Para operação oficial e escalável, o caminho recomendado é a WhatsApp Business Platform/Cloud API da Meta ou um provedor homologado que utilize a API oficial. Em pilotos, o PresençaFlow também pode operar em modo assistido/simulado. Conectores baseados em WhatsApp Web, como soluções tipo Evolution/Baileys, podem ser avaliados caso a empresa aceite os riscos de instabilidade, bloqueio de número e não conformidade com políticas da plataforma.
               </p>
             </div>
 

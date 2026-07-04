@@ -47,8 +47,37 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasNetworkError, setHasNetworkError] = useState(false);
 
+  const [liveEvents, setLiveEvents] = useState<any[]>([]);
+
   useEffect(() => {
     fetchData();
+
+    // SSE EventSource for real-time presence feed
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+    const eventSource = new EventSource(`${apiUrl}/presence/live-feed?token=${token}`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const checkin = JSON.parse(event.data);
+        setLiveEvents((prev) => [checkin, ...prev.slice(0, 19)]);
+        
+        // Update presence stats dynamically
+        setPresenceSummary((prev) => ({
+          ...prev,
+          confirmed: checkin.status === 'CONFIRMED' ? prev.confirmed + 1 : prev.confirmed,
+          pending: checkin.status === 'PENDING' ? prev.pending + 1 : (prev.pending > 0 ? prev.pending - 1 : 0),
+        }));
+      } catch (err) {
+        // Heartbeat or malformed msg
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, []);
 
   const fetchData = async () => {
@@ -333,6 +362,97 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Dashboards - Native SVG Charts */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Donut Chart - Check-in Response Rate */}
+            <div className="p-6 rounded-xl border border-slate-800 bg-slate-900 shadow-lg flex flex-col items-center text-center space-y-4">
+              <h3 className="text-sm font-bold text-slate-350 w-full text-left uppercase tracking-wider text-[10px]">Taxa de Resposta (Check-in)</h3>
+              <div className="relative w-36 h-36 flex items-center justify-center">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  {/* Track circle */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    className="text-slate-800"
+                    strokeWidth="8"
+                    stroke="currentColor"
+                    fill="transparent"
+                  />
+                  {/* Progress circle */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    className="text-emerald-500 transition-all duration-500 ease-in-out"
+                    strokeWidth="8"
+                    strokeDasharray={`${2 * Math.PI * 40}`}
+                    strokeDashoffset={`${2 * Math.PI * 40 * (1 - presenceSummary.responseRate / 100)}`}
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="transparent"
+                  />
+                </svg>
+                <div className="absolute flex flex-col items-center justify-center">
+                  <span className="text-3xl font-extrabold text-white tracking-tight">{presenceSummary.responseRate}%</span>
+                  <span className="text-[10px] text-slate-500 font-medium">Respondido</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-400">
+                Dos {presenceSummary.sentToday} check-ins disparados hoje, {presenceSummary.confirmed} foram respondidos com sucesso.
+              </p>
+            </div>
+
+            {/* Bar Chart - Ocorrências Recentes por Tipo */}
+            <div className="p-6 rounded-xl border border-slate-800 bg-slate-900 shadow-lg flex flex-col space-y-4 md:col-span-2">
+              <h3 className="text-sm font-bold text-slate-350 uppercase tracking-wider text-[10px]">Ocorrências Ativas por Tipo</h3>
+              
+              <div className="flex-1 flex flex-col justify-around min-h-[140px] space-y-3">
+                {/* Bar 1 - Faltas */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-medium">Faltas Registradas</span>
+                    <span className="text-white font-bold">{summary.absencesToday}</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-rose-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, (summary.absencesToday / (summary.absencesToday || 1)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Bar 2 - Atrasos */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-medium">Atrasos de Horário</span>
+                    <span className="text-white font-bold">{summary.lateArrivalsToday}</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-amber-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, (summary.lateArrivalsToday / (summary.lateArrivalsToday || 1)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Bar 3 - Atestados */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-medium">Atestados Sob Revisão</span>
+                    <span className="text-white font-bold">{certSummary.underReview}</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-indigo-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, (certSummary.underReview / (certSummary.underReview || 1)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Main Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left Col - Occurrences */}
@@ -456,6 +576,62 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* Real-time Presence Radar Section */}
+          <div className="mt-8 rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow-xl">
+            <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                  <h2 className="text-lg font-bold text-white">Radar de Presença ao Vivo</h2>
+                </div>
+                <p className="text-xs text-slate-500">Monitoramento em tempo real de marcações e sincronizações</p>
+              </div>
+              {liveEvents.length > 0 && (
+                <button
+                  onClick={() => setLiveEvents([])}
+                  className="text-xs font-semibold text-slate-400 hover:text-slate-350 transition-colors"
+                >
+                  Limpar feed
+                </button>
+              )}
+            </div>
+
+            {liveEvents.length === 0 ? (
+              <div className="py-12 text-center text-slate-500 text-sm flex flex-col items-center justify-center gap-2">
+                <Activity className="w-8 h-8 text-slate-600 animate-pulse" />
+                <span>Aguardando novas marcações de ponto...</span>
+              </div>
+            ) : (
+              <div className="p-6 divide-y divide-slate-800/60 max-h-96 overflow-y-auto">
+                {liveEvents.map((evt: any, idx) => (
+                  <div key={evt.id || idx} className="py-3 flex items-center justify-between text-xs transition-all hover:bg-slate-800/10 px-2 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-slate-850 flex items-center justify-center font-bold text-slate-300">
+                        {evt.employee?.fullName?.[0] || 'E'}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-200 text-sm">{evt.employee?.fullName}</p>
+                        <p className="text-slate-500 text-[10px]">{evt.employee?.sector || 'Geral'} • {evt.employee?.jobTitle || '-'}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="font-mono text-slate-300 font-semibold">{new Date(evt.respondedAt || evt.sentAt).toLocaleTimeString('pt-BR')}</p>
+                        <p className="text-[10px] text-slate-500">{evt.syncStatus === 'OFFLINE_PENDING' || evt.offlineEventId ? 'Sync Offline' : 'Online'}</p>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                        evt.status === 'CONFIRMED' ? 'bg-emerald-500/10 text-emerald-400' :
+                        evt.status === 'LATE' ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-800 text-slate-400'
+                      }`}>
+                        {evt.status === 'CONFIRMED' ? 'Confirmado' : evt.status === 'LATE' ? 'Atrasado' : evt.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}

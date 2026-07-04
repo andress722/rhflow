@@ -102,7 +102,7 @@ class ApiClient {
     return this.request<T>(path, {
       ...options,
       method: 'POST',
-      body: body ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : JSON.stringify({}),
     });
   }
 
@@ -110,7 +110,7 @@ class ApiClient {
     return this.request<T>(path, {
       ...options,
       method: 'PATCH',
-      body: body ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : JSON.stringify({}),
     });
   }
 

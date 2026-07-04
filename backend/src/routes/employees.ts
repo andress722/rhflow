@@ -96,7 +96,7 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
     '/employees',
     { preHandler: [requireRole(['ADMIN', 'HR'])] },
     async (request, reply) => {
-      const { companyId } = request.user;
+      const { companyId, sub } = request.user;
 
       try {
         await PlanLimitsService.assertCanCreateEmployee(companyId);
@@ -205,6 +205,17 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
         },
       });
 
+      await prisma.auditLog.create({
+        data: {
+          companyId,
+          userId: sub,
+          action: 'EMPLOYEE_CREATE',
+          entity: 'Employee',
+          entityId: employee.id,
+          metadata: { employeeName: employee.fullName },
+        },
+      });
+
       return reply.status(201).send({
         success: true,
         data: employee,
@@ -217,7 +228,7 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
     '/employees/:id',
     { preHandler: [requireRole(['ADMIN', 'HR'])] },
     async (request, reply) => {
-      const { companyId } = request.user;
+      const { companyId, sub } = request.user;
       const { id } = request.params as { id: string };
 
       const bodyResult = updateEmployeeSchema.safeParse(request.body);
@@ -327,6 +338,17 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
         data: updateData,
       });
 
+      await prisma.auditLog.create({
+        data: {
+          companyId,
+          userId: sub,
+          action: 'EMPLOYEE_UPDATE',
+          entity: 'Employee',
+          entityId: updated.id,
+          metadata: { employeeName: updated.fullName },
+        },
+      });
+
       return reply.status(200).send({
         success: true,
         data: updated,
@@ -339,8 +361,26 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
     '/employees/:id/deactivate',
     { preHandler: [requireRole(['ADMIN', 'HR'])] },
     async (request, reply) => {
-      const { companyId } = request.user;
+      const { companyId, sub } = request.user;
       const { id } = request.params as { id: string };
+
+      const deactivateBodySchema = z.object({
+        reason: z.string().min(1, 'Motivo de inativação é obrigatório'),
+      });
+
+      const bodyResult = deactivateBodySchema.safeParse(request.body);
+      if (!bodyResult.success) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Motivo de inativação é obrigatório.',
+            details: bodyResult.error.errors,
+          },
+        });
+      }
+
+      const { reason } = bodyResult.data;
 
       const existing = await prisma.employee.findFirst({
         where: { id, companyId },
@@ -357,7 +397,86 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
 
       const updated = await prisma.employee.update({
         where: { id },
-        data: { status: 'INACTIVE' },
+        data: { 
+          status: 'INACTIVE',
+          inactivationReason: reason,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          companyId,
+          userId: sub,
+          action: 'EMPLOYEE_DEACTIVATE',
+          entity: 'Employee',
+          entityId: updated.id,
+          metadata: { employeeName: updated.fullName, reason },
+        },
+      });
+
+      return reply.status(200).send({
+        success: true,
+        data: updated,
+      });
+    },
+  );
+
+  // PATCH /api/employees/:id/activate (ADMIN and HR only)
+  fastify.patch(
+    '/employees/:id/activate',
+    { preHandler: [requireRole(['ADMIN', 'HR'])] },
+    async (request, reply) => {
+      const { companyId, sub } = request.user;
+      const { id } = request.params as { id: string };
+
+      try {
+        await PlanLimitsService.assertCanCreateEmployee(companyId);
+      } catch (err: any) {
+        if (err.message === 'PLAN_LIMIT_EXCEEDED') {
+          return reply.status(403).send({
+            error: 'PLAN_LIMIT_EXCEEDED',
+            message: 'Limite de funcionários do plano atingido. Não é possível reativar este funcionário.',
+          });
+        }
+        return reply.status(500).send({
+          success: false,
+          error: {
+            code: 'SERVER_ERROR',
+            message: err.message || 'Erro ao verificar limites do plano.',
+          },
+        });
+      }
+
+      const existing = await prisma.employee.findFirst({
+        where: { id, companyId },
+      });
+      if (!existing) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Funcionário não encontrado',
+          },
+        });
+      }
+
+      const updated = await prisma.employee.update({
+        where: { id },
+        data: { 
+          status: 'ACTIVE',
+          inactivationReason: null,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          companyId,
+          userId: sub,
+          action: 'EMPLOYEE_ACTIVATE',
+          entity: 'Employee',
+          entityId: updated.id,
+          metadata: { employeeName: updated.fullName },
+        },
       });
 
       return reply.status(200).send({

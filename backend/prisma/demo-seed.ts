@@ -335,7 +335,7 @@ async function main() {
         companyId: company.id,
         employeeId: emp.id,
         workScheduleId: scheduleRemote.id,
-        checkinDate: localDate,
+        checkinDate: new Date(localDate + 'T00:00:00.000Z'),
         status: status as any,
         sentAt: new Date(Date.now() - 3600000 * 2), // 2 hours ago
         respondedAt: status !== 'PENDING' && status !== 'NOT_RESPONDED' ? new Date(Date.now() - 3600000) : null,

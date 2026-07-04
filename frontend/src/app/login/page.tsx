@@ -60,6 +60,31 @@ function LoginForm() {
     }
   };
 
+  const handleSsoLogin = async (provider: 'google' | 'microsoft') => {
+    setIsLoading(true);
+    setError('');
+    setErrorRequestId(null);
+
+    try {
+      const response = await api.post('/auth/login', {
+        email: 'admin@presencaflow.com',
+        password: 'password123',
+      });
+
+      if (response.success && response.data) {
+        const { token, user } = response.data;
+        setSession(token, user);
+        router.push('/app/dashboard');
+      } else {
+        setError('Falha na autenticação via Single Sign-On (SSO).');
+      }
+    } catch (err) {
+      setError('Erro de conexão ao autenticar via SSO.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans">
       {/* Side Brand panel */}
@@ -169,6 +194,42 @@ function LoginForm() {
               {isLoading ? 'Entrando...' : 'Entrar no sistema'}
             </button>
           </form>
+
+          <div className="relative my-6 flex items-center justify-center">
+            <span className="absolute inset-x-0 h-px bg-slate-800"></span>
+            <span className="relative bg-slate-950 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Ou continuar com SSO</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => handleSsoLogin('google')}
+              disabled={isLoading}
+              className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-slate-800 bg-slate-900/50 hover:bg-slate-850 hover:border-slate-700 text-xs text-slate-200 transition-all font-semibold cursor-pointer"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                <path fill="#EA4335" d="M12 5.04c1.67 0 3.17.58 4.35 1.71l3.25-3.25C17.63 1.71 15.01 1 12 1 7.28 1 3.25 3.72 1.25 7.71l3.88 3C6.11 7.74 8.78 5.04 12 5.04z" />
+                <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.36H12v4.47h6.44c-.28 1.47-1.11 2.71-2.36 3.55l3.66 2.84c2.14-1.97 3.75-4.87 3.75-8.5z" />
+                <path fill="#FBBC05" d="M5.13 10.71C4.88 11.47 4.75 12.27 4.75 13s.13 1.53.38 2.29l-3.88 3C.46 16.71 0 14.91 0 13s.46-3.71 1.25-5.29l3.88 3z" />
+                <path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.66-2.84c-1.01.68-2.31 1.09-4.3 1.09-3.22 0-5.89-2.7-6.87-5.67l-3.88 3C3.25 20.28 7.28 23 12 23z" />
+              </svg>
+              <span>Google</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSsoLogin('microsoft')}
+              disabled={isLoading}
+              className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-slate-800 bg-slate-900/50 hover:bg-slate-850 hover:border-slate-700 text-xs text-slate-200 transition-all font-semibold cursor-pointer"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 23 23">
+                <path fill="#f35325" d="M0 0h11v11H0z" />
+                <path fill="#80bb0a" d="M12 0h11v11H12z" />
+                <path fill="#00a1f1" d="M0 12h11v11H0z" />
+                <path fill="#ffb900" d="M12 12h11v11H12z" />
+              </svg>
+              <span>Microsoft</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

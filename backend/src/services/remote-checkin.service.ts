@@ -1,9 +1,10 @@
 import { prisma } from '../lib/prisma';
-import { RemoteCheckinStatus, OccurrenceType, OccurrenceSource, RemoteCheckin } from '@prisma/client';
+import { RemoteCheckinStatus, OccurrenceType, OccurrenceSource, RemoteCheckin, NotificationSeverity } from '@prisma/client';
 import { OccurrenceService } from './occurrence.service';
 import { CompanySettingsService } from './company-settings.service';
 import { PlanLimitsService } from './plan-limits.service';
 import { UsageService } from './usage.service';
+import { NotificationCenterService } from './notification-center.service';
 
 // Helper to get local date civil in America/Sao_Paulo normalized as a Date representing midnight UTC
 export function getLocalDateInSaoPaulo(date: Date = new Date()): Date {
@@ -443,6 +444,24 @@ export class RemoteCheckinService {
             occurrenceId: finalOccId,
           },
         });
+
+        // Notify MANAGER of team member NOT_RESPONDED (fire-and-forget)
+        if (checkin.employee.managerUserId) {
+          NotificationCenterService.createOrUpdateByDedupeKey({
+            companyId,
+            userId: checkin.employee.managerUserId,
+            role: 'MANAGER',
+            type: 'TEAM_CHECKIN_NOT_RESPONDED',
+            severity: NotificationSeverity.WARNING,
+            title: 'Funcionário não respondeu ao check-in',
+            message: `Um funcionário da sua equipe não respondeu ao check-in remoto de hoje.`,
+            actionUrl: `/app/presence`,
+            entityType: 'RemoteCheckin',
+            entityId: checkin.id,
+            dedupeKey: `checkin:${checkin.id}:not-responded`,
+            metadata: { checkinId: checkin.id, employeeId: checkin.employeeId },
+          }).catch(() => {/* silent */});
+        }
       });
 
       updatedCount++;
@@ -460,8 +479,10 @@ export class RemoteCheckinService {
     employeeId: string;
     message: string;
     timestamp: Date;
+    latitude?: number;
+    longitude?: number;
   }): Promise<{ checkin: RemoteCheckin; occurrence?: any } | null> {
-    const { companyId, employeeId, message, timestamp } = options;
+    const { companyId, employeeId, message, timestamp, latitude, longitude } = options;
     const localDate = getLocalDateInSaoPaulo(timestamp);
 
     // Find pending check-in for employee today
@@ -472,7 +493,7 @@ export class RemoteCheckinService {
         checkinDate: localDate,
         status: RemoteCheckinStatus.PENDING,
       },
-      include: { employee: true },
+      include: { employee: true, workSchedule: true },
     });
 
     if (!checkin) {
@@ -510,6 +531,36 @@ export class RemoteCheckinService {
       responseOption = 'Outro';
     }
 
+    // Geofencing perimeter calculation (Haversine Formula)
+    let isOutOfBounds = false;
+    if (
+      latitude !== undefined &&
+      longitude !== undefined &&
+      checkin.workSchedule?.latitude &&
+      checkin.workSchedule?.longitude
+    ) {
+      const scheduleLat = checkin.workSchedule.latitude;
+      const scheduleLng = checkin.workSchedule.longitude;
+      const radiusLimit = checkin.workSchedule.radiusMeters || 200;
+
+      // Distance calculation in meters
+      const R = 6371000;
+      const dLat = (scheduleLat - latitude) * (Math.PI / 180);
+      const dLng = (scheduleLng - longitude) * (Math.PI / 180);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(latitude * (Math.PI / 180)) *
+          Math.cos(scheduleLat * (Math.PI / 180)) *
+          Math.sin(dLng / 2) *
+          Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+
+      if (distance > radiusLimit) {
+        isOutOfBounds = true;
+      }
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       let linkedOcc: any = null;
 
@@ -522,18 +573,22 @@ export class RemoteCheckinService {
         };
         const title = titleMap[occurrenceType as keyof typeof titleMap] || 'Ocorrência de Presença';
 
+        const description = isOutOfBounds 
+          ? `Resposta de check-in: "${message}" (ATENÇÃO: Resposta registrada fora do perímetro geográfico!)`
+          : `Resposta de check-in: "${message}"`;
+
         const { occurrence, isDuplicate } = await OccurrenceService.createOccurrence({
           companyId,
           employeeId,
           type: occurrenceType,
-          title,
-          description: `Resposta de check-in: "${message}"`,
+          title: isOutOfBounds ? `[Fora do Posto] ${titleMap[occurrenceType as keyof typeof titleMap] || title}` : titleMap[occurrenceType as keyof typeof titleMap] || title,
+          description,
           occurrenceDate: timestamp,
           source: OccurrenceSource.WHATSAPP,
           severity: 'MEDIUM',
           managerUserId: checkin.employee.managerUserId || undefined,
           actorType: 'WHATSAPP',
-          metadata: { checkinId: checkin.id, rawMessage: message, timestamp },
+          metadata: { checkinId: checkin.id, rawMessage: message, timestamp, isOutOfBounds },
         }, tx);
 
         linkedOcc = occurrence;
@@ -566,6 +621,9 @@ export class RemoteCheckinService {
           responseOption,
           responseText: message,
           occurrenceId: linkedOcc ? linkedOcc.id : null,
+          latitude: latitude !== undefined ? latitude : null,
+          longitude: longitude !== undefined ? longitude : null,
+          isOutOfBounds,
         },
         include: {
           employee: {
@@ -579,6 +637,30 @@ export class RemoteCheckinService {
 
       return { checkin: updatedCheckin, occurrence: linkedOcc };
     });
+
+    // Dispatch manager notification for ABSENCE_REPORTED (fire-and-forget, outside transaction)
+    if (result && result.checkin.status === RemoteCheckinStatus.ABSENCE_REPORTED) {
+      const employee = await prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { managerUserId: true },
+      });
+      if (employee?.managerUserId) {
+        NotificationCenterService.createOrUpdateByDedupeKey({
+          companyId,
+          userId: employee.managerUserId,
+          role: 'MANAGER',
+          type: 'EMPLOYEE_ABSENCE_REPORTED',
+          severity: NotificationSeverity.WARNING,
+          title: 'Funcionário informou falta via check-in',
+          message: `Um funcionário da sua equipe reportou ausência ou atestado no check-in remoto de hoje.`,
+          actionUrl: `/app/presence`,
+          entityType: 'RemoteCheckin',
+          entityId: result.checkin.id,
+          dedupeKey: `checkin:${result.checkin.id}:absence-reported`,
+          metadata: { checkinId: result.checkin.id, employeeId },
+        }).catch(() => {/* silent */});
+      }
+    }
 
     return result;
   }

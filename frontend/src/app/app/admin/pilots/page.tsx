@@ -446,7 +446,25 @@ export default function PilotsManagementPage() {
                         ? new Date(item.lastActivityAt).toLocaleDateString('pt-BR')
                         : 'Sem registro'}
                     </td>
-                    <td className="p-3 text-center">
+                    <td className="p-3 text-center flex items-center justify-center gap-2">
+                      <Link
+                        href={`/app/admin/pilot-feedback?companyId=${item.companyId}`}
+                        className="inline-flex items-center gap-1 bg-slate-905 hover:bg-slate-800 text-slate-350 border border-slate-800 px-2.5 py-1 rounded text-[11px] font-semibold cursor-pointer transition-colors"
+                      >
+                        Feedbacks
+                      </Link>
+                      <Link
+                        href={`/app/admin/pilot-backlog?companyId=${item.companyId}`}
+                        className="inline-flex items-center gap-1 bg-slate-905 hover:bg-slate-800 text-slate-350 border border-slate-800 px-2.5 py-1 rounded text-[11px] font-semibold cursor-pointer transition-colors"
+                      >
+                        Backlog
+                      </Link>
+                      <Link
+                        href={`/app/admin/executive-reports?companyId=${item.companyId}`}
+                        className="inline-flex items-center gap-1 bg-slate-800 hover:bg-slate-750 text-indigo-400 border border-slate-750 px-2.5 py-1 rounded text-[11px] font-semibold cursor-pointer transition-colors"
+                      >
+                        Relatório
+                      </Link>
                       <button
                         onClick={() => {
                           setSelectedCompanyId(item.companyId);

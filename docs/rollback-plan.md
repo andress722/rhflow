@@ -96,3 +96,22 @@ Caso o processo de rollback demande um período de manutenção offline de mais 
 > Agradecemos a compreensão.
 >
 > *Equipe de Engenharia PresençaFlow RH*
+
+---
+
+## 6. Rollback Operacional Específico (Configurações e Integrações)
+
+### A. Reversão de Importação de Funcionários
+Se uma importação em massa via planilha contiver erros graves de formatação, telefones trocados ou CPFs corrompidos:
+1. **Identificação dos Registros:** As importações em massa criam registros de auditoria com a lista de IDs de colaboradores gerados.
+2. **Exclusão de Lote:** Execute o script de limpeza operacional para remover colaboradores importados por ID ou data de criação para permitir re-importação limpa, garantindo que não apague logs de presenças antigas legítimas.
+
+### B. Reversão de WhatsApp Real para Simulado
+Caso o canal de WhatsApp em produção apresente instabilidade ou desconexão física e seja necessário voltar ao modo de simulação temporária:
+1. Altere o `provider` do `WhatsAppChannel` da empresa afetada de `META_CLOUD` (ou outro) para `SIMULATED`.
+2. Altere o status do canal para `SIMULATION`. Os disparos automáticos continuarão rodando, mas serão salvos localmente sem trafegar rede real de operadora.
+
+### C. Pausa de Check-ins e Desativação de Jobs
+Para desativar temporariamente os disparos automáticos de presença em lote de todos os clientes em caso de instabilidade geral:
+1. Configure a variável de ambiente `DISABLE_JOBS=true` no servidor.
+2. O agendador interno rejeitará requisições de execução do `REMOTE_CHECKIN_BATCH` retornando `SKIPPED`, suspendendo os envios aos funcionários até a estabilização técnica.

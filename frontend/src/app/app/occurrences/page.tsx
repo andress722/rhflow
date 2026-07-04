@@ -44,6 +44,10 @@ export default function OccurrencesPage() {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
+  const [justificationText, setJustificationText] = useState('');
+  const [justificationUrl, setJustificationUrl] = useState('');
+  const [isSubmittingJustification, setIsSubmittingJustification] = useState(false);
+
   useEffect(() => {
     setCurrentUser(getUser());
     fetchData();
@@ -135,6 +139,33 @@ export default function OccurrencesPage() {
       alert('Erro de conexão.');
     } finally {
       setIsSubmittingComment(false);
+    }
+  };
+
+  const handleJustify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!justificationText.trim() || isSubmittingJustification || !selectedOcc) return;
+
+    setIsSubmittingJustification(true);
+    try {
+      const res: any = await api.post(`/occurrences/${selectedOcc.id}/justify`, {
+        justificationText,
+        justificationAttachmentUrl: justificationUrl || null
+      });
+
+      if (res.success) {
+        const detailRes: any = await api.get(`/occurrences/${selectedOcc.id}`);
+        if (detailRes.success) {
+          setSelectedOcc(detailRes.data);
+        }
+        fetchData();
+        setJustificationText('');
+        setJustificationUrl('');
+      }
+    } catch (err) {
+      console.error('Error justifying occurrence:', err);
+    } finally {
+      setIsSubmittingJustification(false);
     }
   };
 
@@ -339,7 +370,13 @@ export default function OccurrencesPage() {
                       {new Date(occ.occurrenceDate).toLocaleString('pt-BR')}
                     </td>
                     <td className="px-6 py-4">{getSourceBadge(occ.source)}</td>
-                    <td className="px-6 py-4">{getStatusBadge(occ.status)}</td>
+                    <td className="px-6 py-4">
+                      {occ.isAbonado ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">Abonada</span>
+                      ) : (
+                        getStatusBadge(occ.status)
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => handleOpenDrawer(occ.id)}
@@ -420,6 +457,70 @@ export default function OccurrencesPage() {
                       <p className="text-sm text-slate-300 p-3 rounded-lg bg-slate-950/20 border border-slate-850 leading-relaxed font-sans">{selectedOcc.description}</p>
                     </div>
                   )}
+
+                  {/* Justificação & Abono Section */}
+                  <div className="space-y-3 pt-4 border-t border-slate-800 animate-fadeIn">
+                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Abono e Justificativa Trabalhista</h3>
+
+                    {selectedOcc.isAbonado ? (
+                      <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/25 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">Ocorrência Abonada</span>
+                          <span className="text-[10px] text-slate-400">Homologado pelo RH</span>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase">Parecer de Justificativa</span>
+                          <p className="text-xs text-slate-200 leading-normal bg-slate-950/40 p-3 rounded-lg border border-slate-850">
+                            {selectedOcc.justificationText}
+                          </p>
+                        </div>
+                        {selectedOcc.justificationAttachmentUrl && (
+                          <a
+                            href={selectedOcc.justificationAttachmentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-semibold transition-colors mt-1"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Visualizar Comprovante Anexo</span>
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      <form onSubmit={handleJustify} className="space-y-4 p-4 rounded-xl bg-slate-950/20 border border-slate-850">
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase">Parecer / Descrição do Abono</label>
+                          <textarea
+                            required
+                            rows={3}
+                            placeholder="Descreva o motivo legal do abono da ocorrência (ex: doação de sangue, TRE, declaração de comparecimento médica)..."
+                            value={justificationText}
+                            onChange={(e) => setJustificationText(e.target.value)}
+                            className="block w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-850 text-xs text-white placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase">Link do Comprovante (Opcional)</label>
+                          <input
+                            type="url"
+                            placeholder="https://exemplo.com/comprovante.pdf"
+                            value={justificationUrl}
+                            onChange={(e) => setJustificationUrl(e.target.value)}
+                            className="block w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={isSubmittingJustification}
+                          className="w-full py-2 rounded-lg bg-emerald-650 hover:bg-emerald-500 disabled:bg-emerald-700/50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md transition-all cursor-pointer animate-pulse"
+                        >
+                          {isSubmittingJustification ? 'Abonando...' : 'Abonar Ocorrência'}
+                        </button>
+                      </form>
+                    )}
+                  </div>
 
                   {/* Linked Medical Certificates */}
                   {selectedOcc.medicalCertificates && selectedOcc.medicalCertificates.length > 0 && (

@@ -59,6 +59,56 @@ export async function runDailyClosingSummaryJob(options: { companyId?: string } 
         },
       });
 
+      // 2.1 Trigger Notifications for Company ADMIN/HR
+      const dateStr = new Date().toISOString().split('T')[0];
+      const { NotificationCenterService } = require('../services/notification-center.service');
+      const { NotificationSeverity } = require('@prisma/client');
+
+      // MANY_OPEN_OCCURRENCES
+      if (openOccurrences > 5) {
+        await NotificationCenterService.createOrUpdateByDedupeKey({
+          companyId: company.id,
+          role: 'HR',
+          type: 'MANY_OPEN_OCCURRENCES',
+          severity: NotificationSeverity.WARNING,
+          title: 'Muitas ocorrências em aberto',
+          message: `Sua empresa possui ${openOccurrences} ocorrências em aberto pendentes de resolução.`,
+          actionUrl: `/app/occurrences`,
+          dedupeKey: `company:${company.id}:many-open-occurrences:${dateStr}`,
+          metadata: { openOccurrences },
+        }).catch(() => {});
+      }
+
+      // MANY_CHECKINS_NOT_RESPONDED
+      if (notRespondedCheckins > 3) {
+        await NotificationCenterService.createOrUpdateByDedupeKey({
+          companyId: company.id,
+          role: 'HR',
+          type: 'MANY_CHECKINS_NOT_RESPONDED',
+          severity: NotificationSeverity.WARNING,
+          title: 'Muitos check-ins não respondidos',
+          message: `Sua empresa possui ${notRespondedCheckins} check-ins sem resposta hoje.`,
+          actionUrl: `/app/presence`,
+          dedupeKey: `company:${company.id}:many-not-responded:${dateStr}`,
+          metadata: { notRespondedCheckins },
+        }).catch(() => {});
+      }
+
+      // CLOSING_PENDENCIES
+      if (openOccurrences > 0) {
+        await NotificationCenterService.createOrUpdateByDedupeKey({
+          companyId: company.id,
+          role: 'HR',
+          type: 'CLOSING_PENDENCIES',
+          severity: NotificationSeverity.INFO,
+          title: 'Relatório diário com pendências',
+          message: `O fechamento diário foi gerado e há ${openOccurrences} ocorrências pendentes.`,
+          actionUrl: `/app/reports`,
+          dedupeKey: `company:${company.id}:closing-pendencies:${dateStr}`,
+          metadata: { openOccurrences, pendingCertificates },
+        }).catch(() => {});
+      }
+
       processedCount++;
       details.push({
         companyId: company.id,

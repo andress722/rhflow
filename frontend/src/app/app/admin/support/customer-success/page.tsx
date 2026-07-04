@@ -19,6 +19,8 @@ import {
   ChevronUp
 } from 'lucide-react';
 
+import { trackEvent } from '@/lib/telemetry';
+
 export default function AdminCustomerSuccessPage() {
   const [items, setItems] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
@@ -64,6 +66,7 @@ export default function AdminCustomerSuccessPage() {
 
   useEffect(() => {
     fetchSuccessData();
+    trackEvent('PAGE_VIEW', 'SUPPORT', { path: '/app/admin/support/customer-success' });
   }, [page, status, plan]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -102,6 +105,13 @@ export default function AdminCustomerSuccessPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/app/help"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-indigo-950/30 hover:bg-indigo-900/30 text-indigo-400 border border-indigo-900/40 rounded-lg transition-colors cursor-pointer"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>Ver Manuais</span>
+          </Link>
           <Link
             href="/app/admin/support"
             className="px-3.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-755 text-slate-300 border border-slate-700 rounded-lg transition-colors cursor-pointer"

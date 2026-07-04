@@ -14,6 +14,8 @@ const settingsUpdateSchema = z.object({
   whatsappCheckinMessage: z.string().max(1000, 'Template de check-in não deve exceder 1000 caracteres').nullable().optional(),
   whatsappNotRespondedMessage: z.string().max(1000, 'Template de sem resposta não deve exceder 1000 caracteres').nullable().optional(),
   whatsappManagerAlertMessage: z.string().max(1000, 'Template de alerta ao gestor não deve exceder 1000 caracteres').nullable().optional(),
+  absenteeismLimitRate: z.number().min(0.1).max(50.0).optional(),
+  enableFacialRecognition: z.boolean().optional(),
 }).strict();
 
 export default async function companySettingsRoutes(fastify: FastifyInstance) {

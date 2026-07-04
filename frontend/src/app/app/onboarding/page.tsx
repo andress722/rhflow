@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { trackEvent } from '@/lib/telemetry';
 import { api } from '@/lib/api';
 import {
   CheckCircle2,
@@ -130,6 +131,7 @@ export default function OnboardingChecklistPage() {
 
   useEffect(() => {
     refreshAll();
+    trackEvent('PAGE_VIEW', 'ONBOARDING', { path: '/app/onboarding' });
   }, []);
 
   const getStepIcon = (key: string) => {
@@ -249,13 +251,22 @@ export default function OnboardingChecklistPage() {
             Acompanhe o checklist de prontidão, configure as conexões obrigatórias da empresa e valide as regras antes de iniciar o piloto.
           </p>
         </div>
-        <button
-          onClick={refreshAll}
-          className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors cursor-pointer"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Atualizar</span>
-        </button>
+        <div className="flex gap-2">
+          <Link
+            href="/app/help"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-indigo-950/30 hover:bg-indigo-900/30 text-indigo-400 border border-indigo-900/40 rounded-lg transition-colors cursor-pointer"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>Ver Manuais</span>
+          </Link>
+          <button
+            onClick={refreshAll}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Atualizar</span>
+          </button>
+        </div>
       </div>
 
       {/* Readiness Card & Status */}

@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { OccurrenceService } from '../services/occurrence.service';
 import { requireRole } from '../lib/auth-middleware';
-import { OccurrenceType, OccurrenceStatus, OccurrenceSource } from '@prisma/client';
+import { OccurrenceType, OccurrenceStatus, OccurrenceSource, NotificationSeverity } from '@prisma/client';
+import { NotificationCenterService } from '../services/notification-center.service';
 
 const createOccurrenceSchema = z.object({
   employeeId: z.string().uuid('ID de funcionário inválido'),
@@ -237,6 +238,49 @@ export default async function occurrencesRoutes(fastify: FastifyInstance) {
         actorType: 'USER',
       });
 
+      // Notify ADMIN/HR if critical occurrence (fire-and-forget)
+      if (!isDuplicate && (severity === 'HIGH' || severity === 'CRITICAL')) {
+        try {
+          await NotificationCenterService.createOrUpdateByDedupeKey({
+            companyId,
+            role: 'HR',
+            type: 'CRITICAL_OCCURRENCE',
+            severity: NotificationSeverity.CRITICAL,
+            title: 'Ocorrência crítica aberta',
+            message: `Uma nova ocorrência de alta severidade foi registrada: "${title}".`,
+            actionUrl: `/app/occurrences`,
+            entityType: 'Occurrence',
+            entityId: occurrence.id,
+            dedupeKey: `occurrence:${occurrence.id}:open-critical`,
+            metadata: { occurrenceId: occurrence.id, type, severity, employeeId },
+          });
+        } catch (_err) {
+          // silent
+        }
+      }
+
+      // Notify MANAGER if team occurrence (fire-and-forget)
+      if (!isDuplicate && employee.managerUserId) {
+        try {
+          await NotificationCenterService.createOrUpdateByDedupeKey({
+            companyId,
+            userId: employee.managerUserId,
+            role: 'MANAGER',
+            type: 'TEAM_OCCURRENCE_OPEN',
+            severity: NotificationSeverity.WARNING,
+            title: 'Nova ocorrência na equipe',
+            message: `Uma nova ocorrência foi registrada para um funcionário da sua equipe: "${title}".`,
+            actionUrl: `/app/occurrences`,
+            entityType: 'Occurrence',
+            entityId: occurrence.id,
+            dedupeKey: `occurrence:${occurrence.id}:open-manager`,
+            metadata: { occurrenceId: occurrence.id, type, severity, employeeId },
+          });
+        } catch (_err) {
+          // silent
+        }
+      }
+
       return reply.status(isDuplicate ? 200 : 201).send({
         success: true,
         data: occurrence,
@@ -413,5 +457,74 @@ export default async function occurrencesRoutes(fastify: FastifyInstance) {
         data: event,
       });
     },
+  );
+
+  // POST /api/occurrences/:id/justify (Submit justification and abono an occurrence)
+  fastify.post(
+    '/occurrences/:id/justify',
+    async (request, reply) => {
+      const { companyId, role, sub } = request.user;
+      const { id } = request.params as { id: string };
+
+      if (!['ADMIN', 'HR'].includes(role)) {
+        return reply.status(403).send({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Apenas Administradores ou RH podem homologar justificativas.' },
+        });
+      }
+
+      const bodySchema = z.object({
+        justificationText: z.string().min(3),
+        justificationAttachmentUrl: z.string().url().optional().nullable(),
+      });
+
+      const parsed = bodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Texto de justificativa inválido.' },
+        });
+      }
+
+      const occurrence = await prisma.occurrence.findFirst({
+        where: { id, companyId },
+      });
+
+      if (!occurrence) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Ocorrência não encontrada.' },
+        });
+      }
+
+      const updated = await prisma.occurrence.update({
+        where: { id },
+        data: {
+          justificationText: parsed.data.justificationText,
+          justificationAttachmentUrl: parsed.data.justificationAttachmentUrl ?? null,
+          isAbonado: true,
+          status: 'RESOLVED',
+          resolvedAt: new Date(),
+          resolvedByUserId: sub,
+        },
+      });
+
+      // Log event
+      await prisma.occurrenceEvent.create({
+        data: {
+          companyId,
+          occurrenceId: id,
+          actorType: 'USER',
+          actorUserId: sub,
+          eventType: 'JUSTIFICATION_APPROVED',
+          message: `Justificativa aprovada e ocorrência abonada: "${parsed.data.justificationText}"`,
+        },
+      });
+
+      return reply.status(200).send({
+        success: true,
+        data: updated,
+      });
+    }
   );
 }

@@ -10,8 +10,10 @@ import { WhatsAppService } from '../services/whatsapp.service';
 import { CompanySettingsService } from '../services/company-settings.service';
 import { PlanLimitsService } from '../services/plan-limits.service';
 import { UsageService } from '../services/usage.service';
-import { MedicalCertificateStatus, OccurrenceType, OccurrenceSource, AbsenceType, AbsenceStatus, OccurrenceStatus } from '@prisma/client';
+import { MedicalCertificateStatus, OccurrenceType, OccurrenceSource, AbsenceType, AbsenceStatus, OccurrenceStatus, NotificationSeverity } from '@prisma/client';
 import { env } from '../config/env';
+import { NotificationCenterService } from '../services/notification-center.service';
+import { OcrService } from '../services/ocr.service';
 
 // Schemas for query and payload validation
 const reviewSchema = z.discriminatedUnion('status', [
@@ -285,6 +287,39 @@ export default async function medicalCertificatesRoutes(fastify: FastifyInstance
     });
 
     await UsageService.incrementUsage(companyId, 'medical_uploads', 1);
+
+    // Notify ADMIN/HR of pending certificate review (fire-and-forget)
+    try {
+      await NotificationCenterService.createOrUpdateByDedupeKey({
+        companyId,
+        role: null,
+        type: 'PENDING_MEDICAL_CERTIFICATE',
+        severity: NotificationSeverity.WARNING,
+        title: 'Atestado médico aguardando revisão',
+        message: `Um novo atestado médico foi recebido e aguarda revisão pelo RH.`,
+        actionUrl: `/app/medical-certificates`,
+        entityType: 'MedicalCertificate',
+        entityId: certificate.id,
+        dedupeKey: `certificate:${certificate.id}:pending`,
+        metadata: { certificateId: certificate.id, employeeId },
+      });
+      // Also notify using role targeting
+      await NotificationCenterService.createOrUpdateByDedupeKey({
+        companyId,
+        role: 'HR',
+        type: 'PENDING_MEDICAL_CERTIFICATE',
+        severity: NotificationSeverity.WARNING,
+        title: 'Atestado médico aguardando revisão',
+        message: `Um novo atestado médico foi recebido e aguarda revisão pelo RH.`,
+        actionUrl: `/app/medical-certificates`,
+        entityType: 'MedicalCertificate',
+        entityId: certificate.id,
+        dedupeKey: `certificate:${certificate.id}:pending:hr`,
+        metadata: { certificateId: certificate.id, employeeId },
+      });
+    } catch (_err) {
+      // silent - notification is secondary effect
+    }
 
     return reply.status(201).send({
       success: true,
@@ -685,6 +720,28 @@ export default async function medicalCertificatesRoutes(fastify: FastifyInstance
             }
           }
 
+          // Notify manager of certificate APPROVED (fire-and-forget)
+          try {
+            if (certificate.employee?.managerUserId) {
+              await NotificationCenterService.createOrUpdateByDedupeKey({
+                companyId,
+                userId: certificate.employee.managerUserId,
+                role: 'MANAGER',
+                type: 'CERTIFICATE_REVIEWED',
+                severity: NotificationSeverity.SUCCESS,
+                title: 'Atestado médico aprovado',
+                message: `O atestado de um funcionário da sua equipe foi aprovado.`,
+                actionUrl: `/app/medical-certificates`,
+                entityType: 'MedicalCertificate',
+                entityId: id,
+                dedupeKey: `certificate:${id}:reviewed`,
+                metadata: { status: 'APPROVED', certificateId: id },
+              });
+            }
+          } catch (_err) {
+            // silent
+          }
+
           return updatedCert;
         } else if (reviewData.status === 'REJECTED') {
           const { rejectionReason, notes } = reviewData;
@@ -724,6 +781,28 @@ export default async function medicalCertificatesRoutes(fastify: FastifyInstance
                 metadata: { rejectionReason, reviewedByUserId: sub, reviewedAt: reviewedAt.toISOString() },
               },
             });
+          }
+
+          // Notify manager of certificate REJECTED (fire-and-forget)
+          try {
+            if (certificate.employee?.managerUserId) {
+              await NotificationCenterService.createOrUpdateByDedupeKey({
+                companyId,
+                userId: certificate.employee.managerUserId,
+                role: 'MANAGER',
+                type: 'CERTIFICATE_REVIEWED',
+                severity: NotificationSeverity.WARNING,
+                title: 'Atestado médico rejeitado',
+                message: `O atestado de um funcionário da sua equipe foi rejeitado.`,
+                actionUrl: `/app/medical-certificates`,
+                entityType: 'MedicalCertificate',
+                entityId: id,
+                dedupeKey: `certificate:${id}:reviewed`,
+                metadata: { status: 'REJECTED', certificateId: id },
+              });
+            }
+          } catch (_err) {
+            // silent
           }
 
           return updatedCert;
@@ -815,5 +894,44 @@ export default async function medicalCertificatesRoutes(fastify: FastifyInstance
         data: transactionResult,
       });
     },
+  );
+
+  // POST /api/medical-certificates/:id/ocr (ADMIN and HR only)
+  fastify.post(
+    '/medical-certificates/:id/ocr',
+    { preHandler: [requireRole(['ADMIN', 'HR'])] },
+    async (request, reply) => {
+      const { companyId } = request.user;
+      const { id } = request.params as { id: string };
+
+      const cert = await prisma.medicalCertificate.findFirst({
+        where: { id, companyId },
+      });
+      if (!cert) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Atestado médico não encontrado',
+          },
+        });
+      }
+
+      try {
+        const ocrData = await OcrService.processCertificate(cert.originalFilename);
+        return reply.status(200).send({
+          success: true,
+          data: ocrData,
+        });
+      } catch (err: any) {
+        return reply.status(500).send({
+          success: false,
+          error: {
+            code: 'SERVER_ERROR',
+            message: err.message || 'Erro ao processar OCR do atestado.',
+          },
+        });
+      }
+    }
   );
 }

@@ -99,6 +99,18 @@ model Company {
   whatsappChannel     WhatsAppChannel?
   whatsappMessageLogs WhatsAppMessageLog[]
   invites             UserInvite[]
+  pilotFeedbacks      PilotFeedback[]
+  pilotBacklogItems   PilotBacklogItem[]
+  notifications       InAppNotification[]
+  notificationPreferences    NotificationPreference[]
+  escalationRules            NotificationEscalationRule[]
+  digests                    NotificationDigest[]
+  timesheetSignatures        TimesheetSignature[]
+  pulseSurveys               PulseSurvey[]
+  apiKeys                    ApiKey[]
+  webhookSubscriptions       WebhookSubscription[]
+  biometricConfiguration     BiometricProcessingConfiguration?
+  leaveRequests              LeaveRequest[]
 
   pilotStatus     PilotStatus @default(NOT_STARTED)
   pilotStartedAt  DateTime?
@@ -120,6 +132,8 @@ model User {
   isActive     Boolean  @default(true)
   mustChangePassword Boolean @default(false)
   lastLoginAt  DateTime?
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -128,11 +142,18 @@ model User {
   resolvedOccurrences  Occurrence[]         @relation("ResolvedByToOccurrence")
   reviewedCertificates MedicalCertificate[] @relation("ReviewedByToCertificate")
   createdAbsenceRecords AbsenceRecord[]     @relation("CreatedByUserToAbsence")
+  assignedFeedbacks    PilotFeedback[]      @relation("AssignedFeedbacks")
   auditLogs            AuditLog[]
+  timesheetSignatures  TimesheetSignature[]
   passwordResetTokens  PasswordResetToken[]
   createdInvites       UserInvite[]         @relation("CreatedInvites")
   assignedLeads        PilotLead[]          @relation("AssignedToUser")
   leadActivities       LeadActivity[]       @relation("CreatedByUser")
+  assignedBacklogItems PilotBacklogItem[]   @relation("AssignedBacklogItems")
+  createdArticles      KnowledgeArticle[]   @relation("CreatedArticles")
+  updatedArticles      KnowledgeArticle[]   @relation("UpdatedArticles")
+  webPushSubscriptions WebPushSubscription[]
+  reviewedLeaveRequests LeaveRequest[]       @relation("ReviewedByToLeave")
 
   @@unique([companyId, email])
 }
@@ -153,6 +174,8 @@ model Employee {
   workScheduleId String?
   workSchedule   WorkSchedule?  @relation(fields: [workScheduleId], references: [id])
   status         EmployeeStatus @default(ACTIVE)
+  inactivationReason String?
+  turnoverRiskScore  Int?           @default(15)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -160,6 +183,11 @@ model Employee {
   medicalCertificates MedicalCertificate[]
   absenceRecords      AbsenceRecord[]
   remoteCheckins      RemoteCheckin[]
+  timesheetSignatures TimesheetSignature[]
+  pulseResponses      PulseSurveyResponse[]
+  hourBankBalance     HourBankBalance?
+  hourBankTransactions HourBankTransaction[]
+  leaveRequests       LeaveRequest[]
 
   @@unique([companyId, cpf])
 }
@@ -175,6 +203,10 @@ model WorkSchedule {
   toleranceMinutes       Int      @default(10)
   requireRemoteCheckin   Boolean  @default(false)
   requireRemoteCheckout  Boolean  @default(false)
+  latitude              Float?
+  longitude             Float?
+  radiusMeters          Int?     @default(200)
+  scheduleType          String   @default("WEEKLY")
   isActive              Boolean  @default(true)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -198,6 +230,9 @@ model Occurrence {
   occurrenceDate   DateTime
   source           OccurrenceSource @default(SYSTEM)
   severity         String           @default("LOW")
+  justificationText          String?
+  justificationAttachmentUrl  String?
+  isAbonado                  Boolean          @default(false)
   resolvedAt       DateTime?
   resolvedByUserId String?
   resolvedBy       User?            @relation("ResolvedByToOccurrence", fields: [resolvedByUserId], references: [id])
@@ -208,6 +243,9 @@ model Occurrence {
   medicalCertificates MedicalCertificate[]
   absenceRecords      AbsenceRecord[]
   remoteCheckins      RemoteCheckin[]
+
+  @@index([companyId, status, createdAt])
+  @@index([companyId, type, createdAt])
 }
 
 model OccurrenceEvent {
@@ -252,6 +290,8 @@ model MedicalCertificate {
   updatedAt         DateTime                 @updatedAt
 
   absenceRecords      AbsenceRecord[]
+
+  @@index([companyId, status, createdAt])
 }
 
 enum AbsenceType {
@@ -315,10 +355,33 @@ model RemoteCheckin {
   responseOption  String?
   responseText    String?
   source          String              @default("AUTOMATION")
+  latitude        Float?
+  longitude       Float?
+  selfieUrl       String?
+  isOutOfBounds   Boolean             @default(false)
+  faceMatchScore  Float?
+  faceVerificationStatus String?
+  clientCapturedAt        DateTime?
+  timezone                String?
+  deviceIdHash            String?
+  offlineEventId          String?             @unique
+  offlineSequence         Int?
+  previousEventHash       String?
+  payloadHash             String?
+  integrityVersion        Int                 @default(1)
+  syncStatus              String              @default("ONLINE")
+  clockDriftSeconds       Int?
+  offlineEvidenceStatus   String?
+  accuracyMeters          Float?
+  geofenceDistanceMeters  Float?
+  configuredRadiusMeters  Float?
+  geofenceResult          String?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
   @@unique([employeeId, checkinDate])
+  @@index([companyId, checkinDate])
+  @@index([companyId, status, checkinDate])
 }
 
 model AuditLog {
@@ -338,6 +401,7 @@ model AuditLog {
   @@index([companyId, action])
   @@index([companyId, createdAt])
   @@index([userId])
+  @@index([companyId, action, createdAt])
 }
 
 model CompanySettings {
@@ -354,6 +418,8 @@ model CompanySettings {
   whatsappCheckinMessage      String?
   whatsappNotRespondedMessage String?
   whatsappManagerAlertMessage String?
+  absenteeismLimitRate        Float    @default(2.0)
+  enableFacialRecognition     Boolean  @default(false)
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 }
@@ -363,6 +429,20 @@ enum SubscriptionStatus {
   TRIALING
   PAST_DUE
   CANCELLED
+}
+
+enum BillingStatus {
+  TRIAL
+  ACTIVE
+  PAYMENT_PENDING
+  OVERDUE
+  CANCELED
+}
+
+enum BillingCycle {
+  MONTHLY
+  QUARTERLY
+  YEARLY
 }
 
 model Plan {
@@ -394,6 +474,19 @@ model CompanySubscription {
   endsAt    DateTime?
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
+
+  billingStatus        BillingStatus @default(TRIAL)
+  contractedAmountCents Int          @default(0)
+  billingCycle         BillingCycle  @default(MONTHLY)
+  contractSentAt       DateTime?
+  contractSignedAt     DateTime?
+  subscriptionStartedAt DateTime?
+  nextBillingAt        DateTime?
+  canceledAt           DateTime?
+  cancellationReason   String?
+  financeNotes         String?
+
+  @@index([billingStatus, nextBillingAt])
 }
 
 model UsageCounter {
@@ -472,6 +565,7 @@ model WhatsAppMessageLog {
   @@index([companyId, createdAt(sort: Desc)])
   @@index([companyId, direction])
   @@index([companyId, status])
+  @@index([companyId, status, createdAt])
 }
 
 model PasswordResetToken {
@@ -571,6 +665,7 @@ model PilotLead {
 
   @@index([status])
   @@index([createdAt])
+  @@index([status, createdAt])
   @@index([email])
   @@index([assignedToUserId])
   @@index([nextFollowUpAt])
@@ -594,4 +689,478 @@ model LeadActivity {
   @@index([createdAt])
 }
 
+enum JobRunStatus {
+  SUCCESS
+  FAILED
+  SKIPPED
+  RUNNING
+}
+
+enum JobTriggerType {
+  INTERNAL
+  MANUAL
+  SYSTEM
+}
+
+model JobRun {
+  id           String         @id @default(uuid())
+  jobKey       String
+  status       JobRunStatus
+  startedAt    DateTime
+  finishedAt   DateTime?
+  durationMs   Int?
+  triggeredBy  JobTriggerType
+  requestId    String?
+  summary      Json?
+  errorCode    String?
+  errorMessage String?
+  createdAt    DateTime       @default(now())
+
+  @@index([jobKey])
+  @@index([status])
+  @@index([startedAt])
+  @@index([jobKey, startedAt])
+}
+
+enum PilotFeedbackSource {
+  WHATSAPP
+  CALL
+  EMAIL
+  MEETING
+  INTERNAL
+  SYSTEM
+}
+
+enum PilotFeedbackCategory {
+  BUG
+  QUESTION
+  USABILITY
+  TRAINING
+  FEATURE_REQUEST
+  INCIDENT
+  COMMERCIAL
+  OTHER
+}
+
+enum PilotFeedbackSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum PilotFeedbackStatus {
+  OPEN
+  IN_REVIEW
+  PLANNED
+  RESOLVED
+  DISMISSED
+}
+
+model PilotFeedback {
+  id               String                @id @default(uuid())
+  companyId        String
+  company          Company               @relation(fields: [companyId], references: [id])
+  reportedByName   String
+  reportedByRole   String?
+  source           PilotFeedbackSource
+  category         PilotFeedbackCategory
+  severity         PilotFeedbackSeverity
+  status           PilotFeedbackStatus   @default(OPEN)
+  title            String                @db.VarChar(200)
+  description      String                @db.VarChar(5000)
+  impact           String?               @db.VarChar(2000)
+  actionTaken      String?               @db.VarChar(2000)
+  relatedRequestId String?
+  relatedUrl       String?
+  assignedToUserId String?
+  assignedTo       User?                 @relation("AssignedFeedbacks", fields: [assignedToUserId], references: [id])
+  resolvedAt       DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  backlogItems     PilotBacklogItem[]
+  knowledgeArticleId String?
+  knowledgeArticle   KnowledgeArticle?    @relation(fields: [knowledgeArticleId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([status])
+  @@index([severity])
+  @@index([category])
+}
+
+enum PilotBacklogType {
+  BUGFIX
+  IMPROVEMENT
+  CONFIGURATION
+  TRAINING
+  DOCUMENTATION
+  FEATURE_REQUEST
+}
+
+enum PilotBacklogPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum PilotBacklogStatus {
+  TRIAGED
+  PLANNED
+  IN_PROGRESS
+  DONE
+  CANCELED
+}
+
+model PilotBacklogItem {
+  id                 String               @id @default(uuid())
+  companyId          String
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  feedbackId         String?
+  feedback           PilotFeedback?       @relation(fields: [feedbackId], references: [id], onDelete: SetNull)
+  title              String               @db.VarChar(200)
+  description        String               @db.VarChar(5000)
+  type               PilotBacklogType
+  priority           PilotBacklogPriority
+  status             PilotBacklogStatus   @default(TRIAGED)
+  impact             String?              @db.VarChar(3000)
+  rootCause          String?              @db.VarChar(3000)
+  plannedAction      String?              @db.VarChar(3000)
+  releaseNote        String?              @db.VarChar(3000)
+  targetReleaseDate  DateTime?
+  completedAt        DateTime?
+  assignedToUserId   String?
+  assignedTo         User?                @relation("AssignedBacklogItems", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([companyId])
+  @@index([status])
+  @@index([priority])
+}
+
+enum KnowledgeCategory {
+  ONBOARDING
+  WHATSAPP
+  CHECKIN
+  OCCURRENCES
+  MEDICAL_CERTIFICATES
+  REPORTS
+  BILLING
+  TROUBLESHOOTING
+  FAQ
+  RELEASE_NOTES
+}
+
+enum KnowledgeAudience {
+  SUPER_ADMIN
+  ADMIN_HR
+  MANAGER
+  EMPLOYEE
+  PUBLIC
+}
+
+enum KnowledgeStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model KnowledgeArticle {
+  id              String            @id @default(uuid())
+  title           String            @db.VarChar(200)
+  slug            String            @unique
+  category        KnowledgeCategory
+  audience        KnowledgeAudience
+  status          KnowledgeStatus   @default(DRAFT)
+  summary         String            @db.VarChar(500)
+  contentMarkdown String            @db.Text
+  tags            String[]
+  relatedUrl      String?
+  createdByUserId String?
+  createdByUser   User?             @relation("CreatedArticles", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedByUserId String?
+  updatedByUser   User?             @relation("UpdatedArticles", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  publishedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  feedbacks       PilotFeedback[]
+
+  @@index([category])
+  @@index([audience])
+  @@index([status])
+}
+
+model UsageTelemetry {
+  id              String            @id @default(uuid())
+  companyId       String?
+  userId          String?
+  eventName       String
+  category        String
+  properties      Json
+  createdAt       DateTime          @default(now())
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([eventName])
+  @@index([createdAt])
+  @@index([eventName, createdAt])
+  @@index([companyId, createdAt])
+}
+enum NotificationSeverity {
+  INFO
+  SUCCESS
+  WARNING
+  CRITICAL
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  DISMISSED
+  RESOLVED
+}
+
+model InAppNotification {
+  id          String               @id @default(uuid())
+  companyId   String?
+  company     Company?             @relation(fields: [companyId], references: [id])
+  userId      String?
+  role        String?
+  type        String
+  severity    NotificationSeverity @default(INFO)
+  status      NotificationStatus   @default(UNREAD)
+  title       String               @db.VarChar(200)
+  message     String               @db.VarChar(1000)
+  actionUrl   String?
+  entityType  String?
+  entityId    String?
+  dedupeKey   String?              @unique
+  metadata    Json?
+  readAt      DateTime?
+  dismissedAt DateTime?
+  resolvedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([companyId, status, createdAt(sort: Desc)])
+  @@index([userId, status])
+  @@index([role, companyId])
+  @@index([severity, status])
+  @@index([expiresAt])
+}
+
+enum NotificationChannel {
+  IN_APP
+}
+
+enum EscalationScope {
+  PLATFORM
+  COMPANY
+}
+
+enum DigestStatus {
+  GENERATED
+  SENT
+  SKIPPED
+}
+
+model NotificationPreference {
+  id              String                @id @default(uuid())
+  companyId       String?
+  company         Company?              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId          String?
+  role            String?
+  type            String?
+  severity        NotificationSeverity?
+  channel         NotificationChannel   @default(IN_APP)
+  enabled         Boolean               @default(true)
+  digestEnabled   Boolean               @default(false)
+  quietHoursStart String?               @db.VarChar(5)
+  quietHoursEnd   String?               @db.VarChar(5)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([role])
+}
+
+model NotificationEscalationRule {
+  id                   String                @id @default(uuid())
+  companyId            String?
+  company              Company?              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  scope                EscalationScope       @default(COMPANY)
+  type                 String?
+  severity             NotificationSeverity?
+  condition            Json?
+  escalateAfterMinutes Int
+  targetRole           String
+  enabled              Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@index([companyId])
+  @@index([scope])
+}
+
+model NotificationDigest {
+  id          String       @id @default(uuid())
+  companyId   String?
+  company     Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId      String?
+  role        String?
+  digestDate  DateTime
+  status      DigestStatus @default(GENERATED)
+  summary     Json
+  generatedAt DateTime     @default(now())
+  createdAt   DateTime     @default(now())
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([role])
+  @@index([digestDate])
+}
+
+model TimesheetSignature {
+  id              String   @id @default(uuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id])
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id])
+  periodMonth     String   
+  signedAt        DateTime @default(now())
+  signedByUserId  String
+  signedByUser    User     @relation(fields: [signedByUserId], references: [id])
+  ipAddress       String
+  userAgent       String
+  auditHash       String
+  documentHash    String?
+  documentVersion Int      @default(1)
+  signedPayloadHash String?
+  consentTextVersion String?
+
+  @@unique([employeeId, periodMonth])
+}
+
+model PulseSurvey {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  title       String
+  question    String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  responses   PulseSurveyResponse[]
+}
+
+model PulseSurveyResponse {
+  id            String      @id @default(uuid())
+  surveyId      String
+  survey        PulseSurvey @relation(fields: [surveyId], references: [id])
+  employeeId    String
+  employee      Employee    @relation(fields: [employeeId], references: [id])
+  score         Int         
+  comment       String?
+  createdAt     DateTime    @default(now())
+
+  @@unique([surveyId, employeeId])
+}
+
+model ApiKey {
+  id          String    @id @default(uuid())
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id])
+  name        String
+  keyPrefix   String
+  secretHash  String    // SHA-256 hash of full token — raw key is NEVER persisted
+  scopes      Json
+  isActive    Boolean   @default(true)
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model WebhookSubscription {
+  id                  String   @id @default(uuid())
+  companyId           String
+  company             Company  @relation(fields: [companyId], references: [id])
+  url                 String
+  events              Json
+  secretToken         String   // HMAC signing secret — shared with destination; rotatable
+  isActive            Boolean  @default(true)
+  deliveryLogsEnabled Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model BiometricProcessingConfiguration {
+  id                         String   @id @default(uuid())
+  companyId                  String   @unique
+  company                    Company  @relation(fields: [companyId], references: [id])
+  enabled                    Boolean  @default(false)
+  purpose                    String?
+  legalBasisDeclared         String?
+  legalBasisNotes            String?
+  retentionDays              Int      @default(30)
+  alternativeMethodAvailable Boolean  @default(true)
+  livenessRequired           Boolean  @default(false)
+  threshold                  Float    @default(80.0)
+  policyVersion              String   @default("1.0")
+  activatedAt                DateTime?
+  activatedByUserId          String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
+model WebPushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+}
+
+model HourBankBalance {
+  id             String   @id @default(uuid())
+  employeeId     String   @unique
+  employee       Employee @relation(fields: [employeeId], references: [id])
+  balanceMinutes Int      @default(0)
+  updatedAt      DateTime @updatedAt
+}
+
+model HourBankTransaction {
+  id            String   @id @default(uuid())
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id])
+  date          DateTime
+  amountMinutes Int      // Positive for credit, negative for debit
+  description   String?
+  createdAt     DateTime @default(now())
+}
+
+model LeaveRequest {
+  id               String        @id @default(uuid())
+  companyId        String
+  company          Company       @relation(fields: [companyId], references: [id])
+  employeeId       String
+  employee         Employee      @relation(fields: [employeeId], references: [id])
+  startDate        DateTime
+  endDate          DateTime
+  type             String        // FERIAS, LICENCA_MEDICA, LICENCA_MATERNIDADE, etc.
+  status           String        @default("PENDING") // PENDING, APPROVED, REJECTED
+  justification    String?
+  reviewedByUserId String?
+  reviewedByUser   User?         @relation("ReviewedByToLeave", fields: [reviewedByUserId], references: [id])
+  reviewedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
 
