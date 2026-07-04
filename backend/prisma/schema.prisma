@@ -111,6 +111,7 @@ model Company {
   webhookSubscriptions       WebhookSubscription[]
   biometricConfiguration     BiometricProcessingConfiguration?
   leaveRequests              LeaveRequest[]
+  calendarIntegration        CalendarIntegration?
 
   pilotStatus     PilotStatus @default(NOT_STARTED)
   pilotStartedAt  DateTime?
@@ -1162,5 +1163,18 @@ model LeaveRequest {
   reviewedAt       DateTime?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
+}
+
+model CalendarIntegration {
+  id           String    @id @default(uuid())
+  companyId    String    @unique
+  company      Company   @relation(fields: [companyId], references: [id])
+  provider     String    // GOOGLE, MICROSOFT
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 

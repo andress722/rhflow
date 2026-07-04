@@ -30,6 +30,13 @@ export default function CompanySettingsPage() {
     policyVersion: '1.0',
   });
 
+  const [calendarConfig, setCalendarConfig] = useState<any>({
+    provider: 'GOOGLE',
+    accessToken: '',
+    isActive: false,
+  });
+  const [syncTestMessage, setSyncTestMessage] = useState('');
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
@@ -72,6 +79,11 @@ export default function CompanySettingsPage() {
       const bioRes: any = await api.get('/admin/compliance/biometrics/config');
       if (bioRes.success && bioRes.data) {
         setBiometricConfig(bioRes.data);
+      }
+
+      const calRes: any = await api.get('/calendar/integration');
+      if (calRes.success && calRes.data) {
+        setCalendarConfig(calRes.data);
       }
     } catch (err) {
       setError('Erro de conexão com o servidor.');
@@ -465,13 +477,95 @@ export default function CompanySettingsPage() {
             </div>
           </div>
 
+          {/* Calendar Integration Card */}
+          <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/60 shadow-xl space-y-6 mt-6">
+            <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white">Sincronização com Calendários Corporativos</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Sincronize plantões, escalas e ausências aprovadas com o Google Agenda ou Outlook 365.
+                </p>
+              </div>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                calendarConfig.isActive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-400'
+              }`}>
+                {calendarConfig.isActive ? 'Ativo' : 'Inativo'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-200">Provedor de Agenda</label>
+                <select
+                  value={calendarConfig.provider}
+                  onChange={(e) => setCalendarConfig({ ...calendarConfig, provider: e.target.value })}
+                  className="block w-full px-4 py-2 mt-1 rounded-lg bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
+                >
+                  <option value="GOOGLE">Google Workspace Calendar</option>
+                  <option value="MICROSOFT">Microsoft Outlook 365</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-200">Access Token de Autenticação</label>
+                <input
+                  type="password"
+                  placeholder="Insira o token OAuth2..."
+                  value={calendarConfig.accessToken || ''}
+                  onChange={(e) => setCalendarConfig({ ...calendarConfig, accessToken: e.target.value })}
+                  className="block w-full px-4 py-2 mt-1 rounded-lg bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-4 pt-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setError('');
+                  setSuccessMsg('');
+                  const res = await api.post('/calendar/integration', {
+                    provider: calendarConfig.provider,
+                    accessToken: calendarConfig.accessToken || 'mock-token-123',
+                  });
+                  if (res.success) {
+                    setCalendarConfig(res.data);
+                    setSuccessMsg('Integração de calendário atualizada com sucesso!');
+                  }
+                }}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer"
+              >
+                Conectar e Salvar
+              </button>
+
+              {calendarConfig.isActive && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const res: any = await api.post('/calendar/integration/sync-test', {});
+                    if (res.success) {
+                      setSyncTestMessage(res.message);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-350 text-xs font-semibold cursor-pointer"
+                >
+                  Testar Sincronização
+                </button>
+              )}
+            </div>
+
+            {syncTestMessage && (
+              <p className="text-xs text-indigo-400 font-medium">{syncTestMessage}</p>
+            )}
+          </div>
+
           {/* Form Actions */}
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3 pt-6 border-t border-slate-800/80 mt-6">
             <button
               type="button"
               onClick={fetchSettings}
               disabled={isSaving}
-              className="px-5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold transition-all cursor-pointer disabled:opacity-50"
+              className="px-5 py-2.5 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-350 text-sm font-bold transition-all cursor-pointer disabled:opacity-50"
             >
               Resetar
             </button>

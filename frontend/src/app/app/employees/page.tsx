@@ -70,6 +70,20 @@ export default function EmployeesPage() {
         ? certRes.data.filter((c: any) => c.employeeId === empId)
         : [];
 
+      try {
+        const riskRes: any = await api.get(`/employees/${empId}/turnover-risk`);
+        if (riskRes.success && riskRes.data) {
+          setSelectedEmployee((prev: any) => {
+            if (prev && prev.id === empId) {
+              return { ...prev, turnoverRiskScore: riskRes.data.turnoverRiskScore };
+            }
+            return prev;
+          });
+        }
+      } catch (_err) {
+        // Silent fallback
+      }
+
       setDrawerStats({
         responseRate: rate,
         checkins: filteredCheckins,
@@ -823,10 +837,26 @@ export default function EmployeesPage() {
                       <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Índice de Turnover & Burnout (IA Vision)</span>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-xl font-extrabold text-indigo-400">{selectedEmployee.turnoverRiskScore ?? 15}%</span>
-                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">Risco Baixo</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase border ${
+                          (selectedEmployee.turnoverRiskScore ?? 15) <= 30
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : (selectedEmployee.turnoverRiskScore ?? 15) <= 70
+                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                        }`}>
+                          {(selectedEmployee.turnoverRiskScore ?? 15) <= 30
+                            ? 'Risco Baixo'
+                            : (selectedEmployee.turnoverRiskScore ?? 15) <= 70
+                            ? 'Risco Médio'
+                            : 'Risco Alto'}
+                        </span>
                       </div>
                       <p className="text-[10px] text-slate-400 mt-1 max-w-sm">
-                        O algoritmo analisou assiduidade, pontualidade e atestados e calculou uma baixa propensão a turnover nas próximas semanas.
+                        {(selectedEmployee.turnoverRiskScore ?? 15) <= 30
+                          ? 'O algoritmo analisou assiduidade, pontualidade e atestados e calculou uma baixa propensão a turnover nas próximas semanas.'
+                          : (selectedEmployee.turnoverRiskScore ?? 15) <= 70
+                          ? 'O colaborador apresenta algumas faltas ou atrasos que requerem atenção de seu gestor direto.'
+                          : 'Atenção imediata! Alto volume de ocorrências ativas ou baixa resposta a pesquisas de clima organizacional.'}
                       </p>
                     </div>
                     <Sparkles className="w-8 h-8 text-indigo-400/40 shrink-0" />

@@ -487,6 +487,164 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
   );
 
   // POST /api/employees/import (ADMIN and HR only)
+  // POST /api/employees/batch-validate (Validates raw rows with custom column mappings)
+  fastify.post(
+    '/employees/batch-validate',
+    { preHandler: [requireRole(['ADMIN', 'HR'])] },
+    async (request, reply) => {
+      const { companyId } = request.user;
+
+      const schema = z.object({
+        rows: z.array(z.record(z.any())),
+        mappings: z.object({
+          name: z.string(),
+          cpf: z.string(),
+          whatsapp: z.string(),
+          email: z.string().optional().nullable(),
+          sector: z.string().optional().nullable(),
+          workModel: z.string().optional().nullable(),
+        }),
+      });
+
+      const parsed = schema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Payload ou mapeamento de colunas inválidos.' },
+        });
+      }
+
+      const { rows, mappings } = parsed.data;
+      const errors: Array<{ index: number; row: any; message: string }> = [];
+      const cpfSeen = new Set<string>();
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const name = row[mappings.name];
+        const rawCpf = row[mappings.cpf];
+        const rawWhatsapp = row[mappings.whatsapp];
+
+        if (!name) {
+          errors.push({ index: i, row, message: 'Nome completo é obrigatório.' });
+          continue;
+        }
+
+        if (!rawCpf) {
+          errors.push({ index: i, row, message: 'CPF é obrigatório.' });
+          continue;
+        }
+
+        const cpf = String(rawCpf).replace(/\D/g, '');
+        if (cpf.length !== 11) {
+          errors.push({ index: i, row, message: `CPF deve conter 11 dígitos (atual: ${cpf.length}).` });
+          continue;
+        }
+
+        if (cpfSeen.has(cpf)) {
+          errors.push({ index: i, row, message: `CPF ${cpf} duplicado no arquivo enviado.` });
+          continue;
+        }
+        cpfSeen.add(cpf);
+
+        if (!rawWhatsapp) {
+          errors.push({ index: i, row, message: 'WhatsApp é obrigatório.' });
+          continue;
+        }
+
+        const whatsapp = String(rawWhatsapp).replace(/\D/g, '');
+        if (whatsapp.length < 10) {
+          errors.push({ index: i, row, message: 'WhatsApp deve conter pelo menos DDD e número.' });
+          continue;
+        }
+
+        // Validate DB uniqueness
+        const existing = await prisma.employee.findFirst({
+          where: { companyId, cpf },
+        });
+        if (existing) {
+          errors.push({ index: i, row, message: `O CPF ${cpf} já está cadastrado para o colaborador "${existing.fullName}".` });
+        }
+      }
+
+      return reply.status(200).send({
+        success: true,
+        data: {
+          totalCount: rows.length,
+          validCount: rows.length - errors.length,
+          errors,
+        },
+      });
+    }
+  );
+
+  // POST /api/employees/batch-import (Imports validated rows with custom column mappings)
+  fastify.post(
+    '/employees/batch-import',
+    { preHandler: [requireRole(['ADMIN', 'HR'])] },
+    async (request, reply) => {
+      const { companyId } = request.user;
+
+      const schema = z.object({
+        rows: z.array(z.record(z.any())),
+        mappings: z.object({
+          name: z.string(),
+          cpf: z.string(),
+          whatsapp: z.string(),
+          email: z.string().optional().nullable(),
+          sector: z.string().optional().nullable(),
+          workModel: z.string().optional().nullable(),
+        }),
+      });
+
+      const parsed = schema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Payload ou mapeamento de colunas inválidos.' },
+        });
+      }
+
+      const { rows, mappings } = parsed.data;
+      const imported: any[] = [];
+
+      await prisma.$transaction(async (tx) => {
+        for (const row of rows) {
+          const name = row[mappings.name];
+          const cpf = String(row[mappings.cpf]).replace(/\D/g, '');
+          const whatsapp = String(row[mappings.whatsapp]).replace(/\D/g, '');
+          const email = mappings.email ? row[mappings.email] : null;
+          const sector = mappings.sector ? row[mappings.sector] : null;
+          const workModelRaw = mappings.workModel ? String(row[mappings.workModel]).toUpperCase() : 'PRESENTIAL';
+          
+          const workModel = ['PRESENTIAL', 'REMOTE', 'HYBRID'].includes(workModelRaw)
+            ? (workModelRaw as any)
+            : 'PRESENTIAL';
+
+          const emp = await tx.employee.create({
+            data: {
+              companyId,
+              fullName: name,
+              cpf,
+              whatsapp,
+              email,
+              sector,
+              workModel,
+              status: 'ACTIVE',
+            },
+          });
+          imported.push(emp);
+        }
+      });
+
+      return reply.status(201).send({
+        success: true,
+        data: {
+          importedCount: imported.length,
+        },
+      });
+    }
+  );
+
   fastify.post(
     '/employees/import',
     { preHandler: [requireRole(['ADMIN', 'HR'])] },
@@ -773,6 +931,83 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
         },
       });
     },
+  );
+
+  // GET /api/employees/:id/turnover-risk (Estimates demission risk based on check-ins and climate surveys)
+  fastify.get(
+    '/employees/:id/turnover-risk',
+    { preHandler: [requireRole(['ADMIN', 'HR'])] },
+    async (request, reply) => {
+      const { companyId } = request.user;
+      const { id } = request.params as { id: string };
+
+      const employee = await prisma.employee.findFirst({
+        where: { id, companyId },
+      });
+
+      if (!employee) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Colaborador não encontrado.' },
+        });
+      }
+
+      // Calculate risk heuristics in past 30 days
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+
+      // 1. Absences count
+      const absencesCount = await prisma.remoteCheckin.count({
+        where: {
+          employeeId: id,
+          status: 'ABSENCE_REPORTED',
+          createdAt: { gte: thirtyDaysAgo },
+        },
+      });
+
+      // 2. Late check-ins count
+      const latesCount = await prisma.remoteCheckin.count({
+        where: {
+          employeeId: id,
+          status: 'LATE',
+          createdAt: { gte: thirtyDaysAgo },
+        },
+      });
+
+      // 3. Low climate survey responses (score <= 2)
+      const lowClimates = await prisma.pulseSurveyResponse.count({
+        where: {
+          employeeId: id,
+          score: { lte: 2 },
+          createdAt: { gte: thirtyDaysAgo },
+        },
+      });
+
+      // Base turnover score calculation (capped at 100)
+      let baseScore = 15;
+      baseScore += absencesCount * 20;
+      baseScore += latesCount * 8;
+      baseScore += lowClimates * 25;
+      const riskScore = Math.min(100, baseScore);
+
+      // Update in DB
+      await prisma.employee.update({
+        where: { id },
+        data: { turnoverRiskScore: riskScore },
+      });
+
+      return reply.status(200).send({
+        success: true,
+        data: {
+          employeeId: id,
+          turnoverRiskScore: riskScore,
+          metrics: {
+            absencesCount,
+            latesCount,
+            lowClimatesCount: lowClimates,
+          },
+        },
+      });
+    }
   );
 }
 

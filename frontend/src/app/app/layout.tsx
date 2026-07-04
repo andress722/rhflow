@@ -235,6 +235,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { name: 'Presença', href: '/app/presence', icon: Activity },
       { name: 'Relatórios', href: '/app/reports', icon: BarChart3 },
       { name: 'Notificações', href: '/app/notifications', icon: Bell },
+      { name: 'Área do Colaborador', href: '/app/employee-portal', icon: Clock },
     ];
 
     if (showBillingLink) {

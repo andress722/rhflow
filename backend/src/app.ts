@@ -46,6 +46,8 @@ import activeSessionsRoutes from './routes/active-sessions';
 import complianceRoutes from './routes/compliance';
 import hourBankRoutes from './routes/hour-bank';
 import leavesRoutes from './routes/leaves';
+import calendarRoutes from './routes/calendar';
+import employeePortalRoutes from './routes/employee-portal';
 import { prisma } from './lib/prisma';
 import { redis } from './lib/redis';
 import { env } from './config/env';
@@ -398,6 +400,8 @@ export function buildApp() {
   app.register(complianceRoutes, { prefix: '/api' });
   app.register(hourBankRoutes, { prefix: '/api' });
   app.register(leavesRoutes, { prefix: '/api' });
+  app.register(calendarRoutes, { prefix: '/api' });
+  app.register(employeePortalRoutes, { prefix: '/api' });
 
   if (env.NODE_ENV === 'test') {
     app.get('/api/test-error-leak', async () => {
