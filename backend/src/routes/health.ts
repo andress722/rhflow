@@ -30,10 +30,11 @@ export default async function healthRoutes(fastify: FastifyInstance) {
     });
   });
 
-  // Readiness Check: returns 200/503 validating database, storage path, and encryption secret
+  // Readiness Check: returns 200/503 validating database, storage path, encryption secret, and Redis
   fastify.get('/health/ready', async (request, reply) => {
     const checks = {
       db: false,
+      redis: false,
       storage: false,
       encryptionSecret: false,
     };
@@ -44,6 +45,17 @@ export default async function healthRoutes(fastify: FastifyInstance) {
       checks.db = true;
     } catch (err) {
       fastify.log.error('Readiness check failed for Database');
+    }
+
+    // Check Redis
+    try {
+      if (redis.status !== 'ready') {
+        await redis.connect();
+      }
+      const pingRes = await redis.ping();
+      checks.redis = pingRes === 'PONG';
+    } catch (err) {
+      fastify.log.error('Readiness check failed for Redis');
     }
 
     // Check Storage Path
@@ -61,7 +73,7 @@ export default async function healthRoutes(fastify: FastifyInstance) {
       checks.encryptionSecret = true; // Allowed to run with fallback secret in dev/test
     }
 
-    const allHealthy = checks.db && checks.storage && checks.encryptionSecret;
+    const allHealthy = checks.db && checks.redis && checks.storage && checks.encryptionSecret;
 
     if (!allHealthy) {
       return reply.status(503).send({
@@ -69,6 +81,7 @@ export default async function healthRoutes(fastify: FastifyInstance) {
         status: 'UNHEALTHY',
         details: {
           db: checks.db ? 'OK' : 'FAIL',
+          redis: checks.redis ? 'OK' : 'FAIL',
           storage: checks.storage ? 'OK' : 'FAIL',
           encryptionSecret: checks.encryptionSecret ? 'OK' : 'FAIL',
         },
@@ -81,6 +94,7 @@ export default async function healthRoutes(fastify: FastifyInstance) {
       status: 'OK',
       details: {
         db: 'OK',
+        redis: 'OK',
         storage: 'OK',
         encryptionSecret: 'OK',
       },

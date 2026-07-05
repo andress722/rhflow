@@ -155,6 +155,7 @@ model User {
   updatedArticles      KnowledgeArticle[]   @relation("UpdatedArticles")
   webPushSubscriptions WebPushSubscription[]
   reviewedLeaveRequests LeaveRequest[]       @relation("ReviewedByToLeave")
+  actedTransactions    HourBankTransaction[] @relation("ActorToTransaction")
 
   @@unique([companyId, email])
 }
@@ -318,6 +319,8 @@ model AbsenceRecord {
   occurrence           Occurrence?        @relation(fields: [occurrenceId], references: [id])
   medicalCertificateId String?
   medicalCertificate   MedicalCertificate? @relation(fields: [medicalCertificateId], references: [id])
+  leaveRequestId       String?            @unique
+  leaveRequest         LeaveRequest?      @relation(fields: [leaveRequestId], references: [id])
   startDate            DateTime
   endDate              DateTime
   days                 Int
@@ -1138,13 +1141,17 @@ model HourBankBalance {
 }
 
 model HourBankTransaction {
-  id            String   @id @default(uuid())
-  employeeId    String
-  employee      Employee @relation(fields: [employeeId], references: [id])
-  date          DateTime
-  amountMinutes Int      // Positive for credit, negative for debit
-  description   String?
-  createdAt     DateTime @default(now())
+  id               String   @id @default(uuid())
+  employeeId       String
+  employee         Employee @relation(fields: [employeeId], references: [id])
+  date             DateTime
+  amountMinutes    Int      // Positive for credit, negative for debit
+  description      String?
+  actorId          String?
+  actor            User?    @relation("ActorToTransaction", fields: [actorId], references: [id])
+  previousBalance  Int?
+  resultingBalance Int?
+  createdAt        DateTime @default(now())
 }
 
 model LeaveRequest {
@@ -1163,6 +1170,7 @@ model LeaveRequest {
   reviewedAt       DateTime?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
+  absenceRecord    AbsenceRecord?
 }
 
 model CalendarIntegration {

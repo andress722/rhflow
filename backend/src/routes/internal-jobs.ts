@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { env } from '../config/env';
+import { JobLock } from '../lib/job-lock';
 import { runRemoteCheckinBatchJob } from '../jobs/remote-checkin-batch.job';
 import { runMarkNotRespondedJob } from '../jobs/mark-not-responded.job';
 import { runDailyClosingSummaryJob } from '../jobs/daily-closing-summary.job';
@@ -48,6 +49,15 @@ export default async function internalJobsRoutes(fastify: FastifyInstance) {
 
     const startedAt = new Date();
     const requestId = (request.headers['x-request-id'] as string) || crypto.randomUUID();
+
+    const lockAcquired = await JobLock.acquire('REMOTE_CHECKIN_BATCH', 300000);
+    if (!lockAcquired) {
+      return reply.status(409).send({
+        success: false,
+        error: { code: 'JOB_LOCKED', message: 'Este job já está rodando em outra instância.' }
+      });
+    }
+
     const jobRunId = await JobRegistryService.startRun('REMOTE_CHECKIN_BATCH', 'INTERNAL', requestId);
 
     try {
@@ -104,6 +114,8 @@ export default async function internalJobsRoutes(fastify: FastifyInstance) {
           message: err.message || 'Erro durante a execução do job.',
         },
       });
+    } finally {
+      await JobLock.release('REMOTE_CHECKIN_BATCH');
     }
   });
 
@@ -116,6 +128,15 @@ export default async function internalJobsRoutes(fastify: FastifyInstance) {
 
     const startedAt = new Date();
     const requestId = (request.headers['x-request-id'] as string) || crypto.randomUUID();
+
+    const lockAcquired = await JobLock.acquire('MARK_NOT_RESPONDED', 300000);
+    if (!lockAcquired) {
+      return reply.status(409).send({
+        success: false,
+        error: { code: 'JOB_LOCKED', message: 'Este job já está rodando em outra instância.' }
+      });
+    }
+
     const jobRunId = await JobRegistryService.startRun('MARK_NOT_RESPONDED', 'INTERNAL', requestId);
 
     try {
@@ -172,6 +193,8 @@ export default async function internalJobsRoutes(fastify: FastifyInstance) {
           message: err.message || 'Erro durante a execução do job.',
         },
       });
+    } finally {
+      await JobLock.release('MARK_NOT_RESPONDED');
     }
   });
 
@@ -853,6 +876,15 @@ export default async function internalJobsRoutes(fastify: FastifyInstance) {
   fastify.post('/internal/jobs/biometric-cleanup', async (request, reply) => {
     const startedAt = new Date();
     const requestId = (request.headers['x-request-id'] as string) || crypto.randomUUID();
+
+    const lockAcquired = await JobLock.acquire('BIOMETRIC_CLEANUP', 300000);
+    if (!lockAcquired) {
+      return reply.status(409).send({
+        success: false,
+        error: { code: 'JOB_LOCKED', message: 'Este job já está rodando em outra instância.' }
+      });
+    }
+
     const jobRunId = await JobRegistryService.startRun('BIOMETRIC_CLEANUP', 'INTERNAL', requestId);
 
     try {
@@ -914,6 +946,8 @@ export default async function internalJobsRoutes(fastify: FastifyInstance) {
         success: false,
         error: { code: 'JOB_ERROR', message: err.message || 'Erro no job de limpeza biométrica.' },
       });
+    } finally {
+      await JobLock.release('BIOMETRIC_CLEANUP');
     }
   });
 }

@@ -115,18 +115,6 @@ export default async function presenceRoutes(fastify: FastifyInstance) {
       syncStatus?: string;
     };
 
-    if (offlineEventId) {
-      const existing = await prisma.remoteCheckin.findFirst({
-        where: { offlineEventId },
-      });
-      if (existing) {
-        return reply.status(409).send({
-          success: false,
-          error: { code: 'DUPLICATE_EVENT', message: 'Replay de evento offline bloqueado.' },
-        });
-      }
-    }
-
     const checkin = await prisma.remoteCheckin.findFirst({
       where: { id, companyId },
       include: { employee: true },
@@ -140,6 +128,72 @@ export default async function presenceRoutes(fastify: FastifyInstance) {
           message: 'Check-in não encontrado.',
         },
       });
+    }
+
+    if (offlineEventId) {
+      const existing = await prisma.remoteCheckin.findFirst({
+        where: { offlineEventId },
+      });
+      if (existing) {
+        return reply.status(409).send({
+          success: false,
+          error: { code: 'DUPLICATE_EVENT', message: 'Replay de evento offline bloqueado.' },
+        });
+      }
+    }
+
+    // Validate Payload Integrity and Hashing
+    if (payloadHash) {
+      const crypto = require('crypto');
+      const rawPayloadString = JSON.stringify({
+        checkinId: id,
+        message,
+        latitude,
+        longitude,
+        selfieUrl,
+        clientCapturedAt,
+        offlineEventId,
+        offlineSequence
+      });
+
+      const calculatedSha = crypto.createHash('sha256').update(rawPayloadString).digest('hex');
+      
+      // Calculate simple fallback hash
+      let simpleHash = 0;
+      for (let i = 0; i < rawPayloadString.length; i++) {
+        const char = rawPayloadString.charCodeAt(i);
+        simpleHash = (simpleHash << 5) - simpleHash + char;
+        simpleHash = simpleHash & simpleHash;
+      }
+      const calculatedSimple = 'fallback_hash_' + Math.abs(simpleHash).toString(16);
+
+      if (calculatedSha !== payloadHash && calculatedSimple !== payloadHash) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'INTEGRITY_VIOLATION', message: 'Assinatura/Integridade do payload offline adulterada.' },
+        });
+      }
+    }
+
+    // Validate Chronological Sequencing order
+    if (offlineSequence && offlineSequence > 1 && previousEventHash) {
+      const previousCheckin = await prisma.remoteCheckin.findFirst({
+        where: {
+          employeeId: checkin.employeeId,
+          companyId,
+          payloadHash: previousEventHash
+        }
+      });
+
+      if (!previousCheckin) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'OUT_OF_ORDER_SEQUENCE',
+            message: 'Sequência de sincronização offline fora de ordem. Sincronize os eventos anteriores primeiro.'
+          }
+        });
+      }
     }
 
     try {

@@ -241,8 +241,11 @@ export function buildApp() {
   app.addHook('onRequest', async (request, reply) => {
     (request as any).startTime = Date.now();
     const requestId = (request.headers['x-request-id'] as string) || crypto.randomUUID();
+    const correlationId = (request.headers['x-correlation-id'] as string) || requestId;
     (request as any).requestId = requestId;
+    (request as any).correlationId = correlationId;
     reply.header('x-request-id', requestId);
+    reply.header('x-correlation-id', correlationId);
   });
 
   // 2. Hook to perform structured logging on response completion
@@ -257,9 +260,11 @@ export function buildApp() {
     const statusCode = reply.statusCode;
     const errorCode = (reply as any).errorCode || null;
     const requestId = (request as any).requestId;
+    const correlationId = (request as any).correlationId;
 
     const logData = {
       requestId,
+      correlationId,
       companyId,
       userId,
       method,

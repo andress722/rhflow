@@ -503,6 +503,8 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
           email: z.string().optional().nullable(),
           sector: z.string().optional().nullable(),
           workModel: z.string().optional().nullable(),
+          managerUserId: z.string().optional().nullable(),
+          workScheduleId: z.string().optional().nullable(),
         }),
       });
 
@@ -523,6 +525,8 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
         const name = row[mappings.name];
         const rawCpf = row[mappings.cpf];
         const rawWhatsapp = row[mappings.whatsapp];
+        const rawManagerId = mappings.managerUserId ? row[mappings.managerUserId] : null;
+        const rawScheduleId = mappings.workScheduleId ? row[mappings.workScheduleId] : null;
 
         if (!name) {
           errors.push({ index: i, row, message: 'Nome completo é obrigatório.' });
@@ -563,6 +567,29 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
         });
         if (existing) {
           errors.push({ index: i, row, message: `O CPF ${cpf} já está cadastrado para o colaborador "${existing.fullName}".` });
+          continue;
+        }
+
+        // Tenant-aware manager check
+        if (rawManagerId) {
+          const managerExists = await prisma.user.findFirst({
+            where: { id: String(rawManagerId), companyId }
+          });
+          if (!managerExists) {
+            errors.push({ index: i, row, message: 'O gestor informado é inválido ou pertence a outra empresa.' });
+            continue;
+          }
+        }
+
+        // Tenant-aware schedule check
+        if (rawScheduleId) {
+          const scheduleExists = await prisma.workSchedule.findFirst({
+            where: { id: String(rawScheduleId), companyId }
+          });
+          if (!scheduleExists) {
+            errors.push({ index: i, row, message: 'A escala de trabalho informada é inválida ou pertence a outra empresa.' });
+            continue;
+          }
         }
       }
 
@@ -593,6 +620,8 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
           email: z.string().optional().nullable(),
           sector: z.string().optional().nullable(),
           workModel: z.string().optional().nullable(),
+          managerUserId: z.string().optional().nullable(),
+          workScheduleId: z.string().optional().nullable(),
         }),
       });
 
@@ -606,42 +635,92 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
 
       const { rows, mappings } = parsed.data;
       const imported: any[] = [];
+      const cpfSeen = new Set<string>();
 
-      await prisma.$transaction(async (tx) => {
-        for (const row of rows) {
-          const name = row[mappings.name];
-          const cpf = String(row[mappings.cpf]).replace(/\D/g, '');
-          const whatsapp = String(row[mappings.whatsapp]).replace(/\D/g, '');
-          const email = mappings.email ? row[mappings.email] : null;
-          const sector = mappings.sector ? row[mappings.sector] : null;
-          const workModelRaw = mappings.workModel ? String(row[mappings.workModel]).toUpperCase() : 'PRESENTIAL';
-          
-          const workModel = ['PRESENTIAL', 'REMOTE', 'HYBRID'].includes(workModelRaw)
-            ? (workModelRaw as any)
-            : 'PRESENTIAL';
+      try {
+        await prisma.$transaction(async (tx) => {
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const name = row[mappings.name];
+            const cpf = String(row[mappings.cpf]).replace(/\D/g, '');
+            const whatsapp = String(row[mappings.whatsapp]).replace(/\D/g, '');
+            const email = mappings.email ? row[mappings.email] : null;
+            const sector = mappings.sector ? row[mappings.sector] : null;
+            const workModelRaw = mappings.workModel ? String(row[mappings.workModel]).toUpperCase() : 'PRESENTIAL';
+            const managerUserId = mappings.managerUserId ? String(row[mappings.managerUserId]) : null;
+            const workScheduleId = mappings.workScheduleId ? String(row[mappings.workScheduleId]) : null;
 
-          const emp = await tx.employee.create({
-            data: {
-              companyId,
-              fullName: name,
-              cpf,
-              whatsapp,
-              email,
-              sector,
-              workModel,
-              status: 'ACTIVE',
-            },
-          });
-          imported.push(emp);
-        }
-      });
+            if (!name || cpf.length !== 11 || whatsapp.length < 10) {
+              throw new Error(`Dados inválidos na linha ${i + 1}.`);
+            }
 
-      return reply.status(201).send({
-        success: true,
-        data: {
-          importedCount: imported.length,
-        },
-      });
+            if (cpfSeen.has(cpf)) {
+              throw new Error(`CPF ${cpf} duplicado no payload da linha ${i + 1}.`);
+            }
+            cpfSeen.add(cpf);
+
+            // Double check uniqueness in DB inside transaction
+            const existing = await tx.employee.findFirst({
+              where: { companyId, cpf },
+            });
+            if (existing) {
+              throw new Error(`O CPF ${cpf} já está cadastrado para o colaborador "${existing.fullName}" (Linha ${i + 1}).`);
+            }
+
+            // Tenant-aware manager check inside transaction
+            if (managerUserId) {
+              const managerExists = await tx.user.findFirst({
+                where: { id: managerUserId, companyId }
+              });
+              if (!managerExists) {
+                throw new Error(`O gestor na linha ${i + 1} é inválido ou pertence a outra empresa.`);
+              }
+            }
+
+            // Tenant-aware schedule check inside transaction
+            if (workScheduleId) {
+              const scheduleExists = await tx.workSchedule.findFirst({
+                where: { id: workScheduleId, companyId }
+              });
+              if (!scheduleExists) {
+                throw new Error(`A escala de trabalho na linha ${i + 1} é inválida ou pertence a outra empresa.`);
+              }
+            }
+
+            const workModel = ['PRESENTIAL', 'REMOTE', 'HYBRID'].includes(workModelRaw)
+              ? (workModelRaw as any)
+              : 'PRESENTIAL';
+
+            const emp = await tx.employee.create({
+              data: {
+                companyId,
+                fullName: name,
+                cpf,
+                whatsapp,
+                email,
+                sector,
+                workModel,
+                managerUserId,
+                workScheduleId,
+                status: 'ACTIVE',
+              },
+            });
+            imported.push(emp);
+          }
+        });
+
+        return reply.status(201).send({
+          success: true,
+          data: {
+            importedCount: imported.length,
+          },
+        });
+      } catch (err: any) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'IMPORT_ERROR', message: err.message || 'Erro ao processar importação.' }
+        });
+      }
     }
   );
 
@@ -982,12 +1061,42 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
         },
       });
 
-      // Base turnover score calculation (capped at 100)
+      // Base score calculation (capped at 100)
       let baseScore = 15;
-      baseScore += absencesCount * 20;
-      baseScore += latesCount * 8;
-      baseScore += lowClimates * 25;
+      const factors: Array<{ code: string; description: string; weight: number }> = [];
+
+      if (absencesCount > 0) {
+        const weight = absencesCount * 20;
+        baseScore += weight;
+        factors.push({
+          code: 'ABSENCE_TREND',
+          description: `Aumento de ausências injustificadas (${absencesCount} registros nos últimos 30 dias)`,
+          weight,
+        });
+      }
+
+      if (latesCount > 0) {
+        const weight = latesCount * 8;
+        baseScore += weight;
+        factors.push({
+          code: 'LATE_TREND',
+          description: `Atrasos recorrentes detectados (${latesCount} registros nos últimos 30 dias)`,
+          weight,
+        });
+      }
+
+      if (lowClimates > 0) {
+        const weight = lowClimates * 25;
+        baseScore += weight;
+        factors.push({
+          code: 'LOW_CLIMATE_SURVEY',
+          description: `Avaliações baixas em pesquisas de clima (Pulse Surveys: ${lowClimates} nos últimos 30 dias)`,
+          weight,
+        });
+      }
+
       const riskScore = Math.min(100, baseScore);
+      const level = riskScore <= 30 ? 'LOW' : riskScore <= 70 ? 'MODERATE' : 'HIGH';
 
       // Update in DB
       await prisma.employee.update({
@@ -1000,6 +1109,12 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
         data: {
           employeeId: id,
           turnoverRiskScore: riskScore,
+          score: riskScore,
+          level,
+          factors,
+          calculationType: 'HEURISTIC',
+          humanReviewRequired: true,
+          disclaimer: 'Os sinais apresentados são indicadores auxiliares e não devem ser utilizados isoladamente para decisões trabalhistas, disciplinares ou de desligamento.',
           metrics: {
             absencesCount,
             latesCount,

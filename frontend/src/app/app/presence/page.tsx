@@ -26,6 +26,7 @@ import {
 import { api } from '@/lib/api';
 import { getUser } from '@/lib/auth';
 import PlanErrorAlert from '@/components/PlanErrorAlert';
+import { offlineDB } from '@/lib/offline-db';
 
 const STATUS_LABELS = {
   PENDING: 'Pendente',
@@ -163,21 +164,23 @@ export default function PresencePage() {
 
     const handleOnline = async () => {
       setIsOnline(true);
-      const queue = JSON.parse(localStorage.getItem('presence_offline_queue') || '[]');
-      if (queue.length > 0) {
-        setSyncStatus('syncing');
-        try {
+      try {
+        const queue = await offlineDB.getQueue();
+        if (queue.length > 0) {
+          setSyncStatus('syncing');
           for (const item of queue) {
             await api.post(`/presence/${item.checkinId}/simulate-response`, item.payload);
+            if (item.id !== undefined) {
+              await offlineDB.removeItem(item.id);
+            }
           }
-          localStorage.removeItem('presence_offline_queue');
           setSyncStatus('success');
           setTimeout(() => setSyncStatus('idle'), 4000);
           fetchData();
-        } catch (err) {
-          console.error('Error syncing offline queue:', err);
-          setSyncStatus('idle');
         }
+      } catch (err) {
+        console.error('Error syncing offline queue:', err);
+        setSyncStatus('idle');
       }
     };
 
@@ -327,12 +330,17 @@ export default function PresencePage() {
     }
 
     if (!isOnline) {
-      const offlineQueue = JSON.parse(localStorage.getItem('presence_offline_queue') || '[]');
-      offlineQueue.push({ checkinId: simulateCheckinId, payload });
-      localStorage.setItem('presence_offline_queue', JSON.stringify(offlineQueue));
-
-      setIsSimulateOpen(false);
-      alert('Você está desconectado do sinal de rede. O registro foi armazenado localmente e será sincronizado quando a conexão retornar.');
+      try {
+        await offlineDB.addToQueue(simulateCheckinId, payload.message, {
+          latitude: payload.latitude,
+          longitude: payload.longitude,
+          selfieUrl: payload.selfieUrl
+        });
+        setIsSimulateOpen(false);
+        alert('Você está desconectado do sinal de rede. O registro foi armazenado de forma segura no IndexedDB e será sincronizado quando a conexão retornar.');
+      } catch (err) {
+        setSimulateError('Erro ao salvar check-in offline.');
+      }
       setIsSimulating(false);
       return;
     }

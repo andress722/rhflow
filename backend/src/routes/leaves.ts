@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { z } from 'zod';
 import { requireRole } from '../lib/auth-middleware';
 import { AbsenceStatus, AbsenceType } from '@prisma/client';
+import { CalendarSyncService } from '../services/calendar-sync.service';
 
 export default async function leavesRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', fastify.authenticate);
@@ -105,38 +106,67 @@ export default async function leavesRoutes(fastify: FastifyInstance) {
     const diffTime = Math.abs(leave.endDate.getTime() - leave.startDate.getTime());
     const daysCount = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
-    const updated = await prisma.$transaction(async (tx) => {
-      // 1. Mark leave request as approved
-      const updatedRequest = await tx.leaveRequest.update({
-        where: { id },
-        data: {
-          status: 'APPROVED',
-          reviewedByUserId: userId,
-          reviewedAt: new Date()
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        // Double check status inside transaction to prevent race conditions (idempotency check)
+        const currentLeave = await tx.leaveRequest.findUnique({
+          where: { id }
+        });
+        if (!currentLeave || currentLeave.status !== 'PENDING') {
+          throw new Error('Solicitação de afastamento já foi processada.');
         }
+
+        // Check if an AbsenceRecord for this leaveRequestId already exists
+        const existingAbsence = await tx.absenceRecord.findUnique({
+          where: { leaveRequestId: id }
+        });
+        if (existingAbsence) {
+          throw new Error('Registro de ausência já gerado para esta solicitação.');
+        }
+
+        // 1. Mark leave request as approved
+        const updatedRequest = await tx.leaveRequest.update({
+          where: { id },
+          data: {
+            status: 'APPROVED',
+            reviewedByUserId: userId,
+            reviewedAt: new Date()
+          }
+        });
+
+        // 2. Insert dynamic AbsenceRecord
+        await tx.absenceRecord.create({
+          data: {
+            companyId,
+            employeeId: leave.employeeId,
+            leaveRequestId: id, // unique link
+            startDate: leave.startDate,
+            endDate: leave.endDate,
+            days: daysCount,
+            type: leave.type === 'LICENCA_MEDICA' ? AbsenceType.MEDICAL_LEAVE : AbsenceType.JUSTIFIED_ABSENCE,
+            status: AbsenceStatus.ACTIVE,
+            createdByUserId: userId
+          }
+        });
+
+        return updatedRequest;
       });
 
-      // 2. Insert dynamic AbsenceRecord
-      await tx.absenceRecord.create({
-        data: {
-          companyId,
-          employeeId: leave.employeeId,
-          startDate: leave.startDate,
-          endDate: leave.endDate,
-          days: daysCount,
-          type: leave.type === 'LICENCA_MEDICA' ? AbsenceType.MEDICAL_LEAVE : AbsenceType.JUSTIFIED_ABSENCE,
-          status: AbsenceStatus.ACTIVE,
-          createdByUserId: userId
-        }
+      // Trigger calendar synchronization asynchronously (fire-and-forget)
+      CalendarSyncService.syncLeaveEvent(id, companyId).catch((err) => {
+        console.error(`Asynchronous calendar sync failed for leaveRequestId: ${id}`, err);
       });
 
-      return updatedRequest;
-    });
-
-    return reply.status(200).send({
-      success: true,
-      data: updated
-    });
+      return reply.status(200).send({
+        success: true,
+        data: updated
+      });
+    } catch (err: any) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'TRANSACTION_ERROR', message: err.message || 'Falha ao aprovar afastamento.' }
+      });
+    }
   });
 
   // POST /api/leaves/:id/reject

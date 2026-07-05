@@ -831,11 +831,18 @@ export default function EmployeesPage() {
                     </div>
                   </div>
 
-                  {/* Turnover Risk IA Banner */}
-                  <div className="p-4 rounded-xl bg-gradient-to-r from-slate-950/70 to-indigo-950/20 border border-slate-850 flex items-center justify-between animate-fadeIn">
+                  {/* Workforce Risk Signals Banner */}
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-slate-950/70 to-indigo-950/20 border border-slate-850 flex flex-col gap-2.5 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Sinais de Risco Operacional (Workforce Risk Signals)</span>
+                        <span className="text-[8px] text-indigo-400 font-semibold uppercase tracking-wider">Cálculo Heurístico • Revisão Humana Obrigatória</span>
+                      </div>
+                      <Sparkles className="w-5 h-5 text-indigo-400/40 shrink-0" />
+                    </div>
+
                     <div>
-                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Índice de Turnover & Burnout (IA Vision)</span>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2">
                         <span className="text-xl font-extrabold text-indigo-400">{selectedEmployee.turnoverRiskScore ?? 15}%</span>
                         <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase border ${
                           (selectedEmployee.turnoverRiskScore ?? 15) <= 30
@@ -851,15 +858,18 @@ export default function EmployeesPage() {
                             : 'Risco Alto'}
                         </span>
                       </div>
-                      <p className="text-[10px] text-slate-400 mt-1 max-w-sm">
+                      <p className="text-[10px] text-slate-400 mt-1.5 leading-normal">
                         {(selectedEmployee.turnoverRiskScore ?? 15) <= 30
-                          ? 'O algoritmo analisou assiduidade, pontualidade e atestados e calculou uma baixa propensão a turnover nas próximas semanas.'
+                          ? 'O algoritmo avaliou assiduidade, pontualidade e atestados e calculou uma baixa propensão a turnover nas próximas semanas.'
                           : (selectedEmployee.turnoverRiskScore ?? 15) <= 70
-                          ? 'O colaborador apresenta algumas faltas ou atrasos que requerem atenção de seu gestor direto.'
+                          ? 'O colaborador apresenta algumas faltas, atrasos ou baixo engajamento que requerem atenção de seu gestor direto.'
                           : 'Atenção imediata! Alto volume de ocorrências ativas ou baixa resposta a pesquisas de clima organizacional.'}
                       </p>
                     </div>
-                    <Sparkles className="w-8 h-8 text-indigo-400/40 shrink-0" />
+
+                    <p className="text-[9px] text-slate-500 border-t border-slate-800/60 pt-2 leading-relaxed italic">
+                      Disclaimers: Os sinais apresentados são indicadores auxiliares e não devem ser utilizados isoladamente para decisões trabalhistas, disciplinares ou de desligamento.
+                    </p>
                   </div>
 
                   <div className="space-y-3">

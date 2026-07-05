@@ -92,12 +92,21 @@ export default async function hourBankRoutes(fastify: FastifyInstance) {
     }
 
     const transaction = await prisma.$transaction(async (tx) => {
+      const currentBalance = await tx.hourBankBalance.findUnique({
+        where: { employeeId },
+      });
+      const previousBalance = currentBalance ? currentBalance.balanceMinutes : 0;
+      const resultingBalance = previousBalance + parsed.data.amountMinutes;
+
       const createdTx = await tx.hourBankTransaction.create({
         data: {
           employeeId,
           date: new Date(),
           amountMinutes: parsed.data.amountMinutes,
-          description: parsed.data.description
+          description: parsed.data.description,
+          actorId: request.user.sub,
+          previousBalance,
+          resultingBalance,
         }
       });
 
@@ -105,12 +114,10 @@ export default async function hourBankRoutes(fastify: FastifyInstance) {
         where: { employeeId },
         create: {
           employeeId,
-          balanceMinutes: parsed.data.amountMinutes
+          balanceMinutes: resultingBalance
         },
         update: {
-          balanceMinutes: {
-            increment: parsed.data.amountMinutes
-          }
+          balanceMinutes: resultingBalance
         }
       });
 
