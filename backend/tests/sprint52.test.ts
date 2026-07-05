@@ -273,6 +273,73 @@ describe('PresençaFlow RH - Sprint 52.1 Verification & Hardening integration Te
       expect(redacted.nested.token).toBe('[REDACTED]');
       expect(redacted.nested.message).toBe('Colaborador com CPF ***.***.***-00');
     });
+
+    it('should completely redact or mask all 19 required PII and Secret keys', () => {
+      const fullSensitiveObj = {
+        authorization: 'secret-auth-value',
+        cookie: 'secret-cookie-value',
+        apiKey: 'secret-api-key-value',
+        apikey: 'secret-apikey-lowercase-value',
+        token: 'secret-token-value',
+        accessToken: 'secret-access-token-value',
+        refreshToken: 'secret-refresh-token-value',
+        password: 'secret-password-value',
+        secret: 'secret-secret-value',
+        clientSecret: 'secret-client-secret-value',
+        cpf: '12345678901',
+        pis: '98765432100',
+        cid: 'A00',
+        medicalData: 'sensitive-medical-report',
+        diagnosis: 'depression',
+        biometricTemplate: 'binary-biometric-vector-data',
+        embedding: 'float-embedding-vector',
+        selfie: 'base64-selfie-data',
+        faceImage: 'base64-face-image-data'
+      };
+
+      const redacted = redactPII(fullSensitiveObj);
+
+      // Verify none of the raw values appear in the output
+      expect(redacted.authorization).not.toBe('secret-auth-value');
+      expect(redacted.cookie).not.toBe('secret-cookie-value');
+      expect(redacted.apiKey).not.toBe('secret-api-key-value');
+      expect(redacted.apikey).not.toBe('secret-apikey-lowercase-value');
+      expect(redacted.token).not.toBe('secret-token-value');
+      expect(redacted.accessToken).not.toBe('secret-access-token-value');
+      expect(redacted.refreshToken).not.toBe('secret-refresh-token-value');
+      expect(redacted.password).not.toBe('secret-password-value');
+      expect(redacted.secret).not.toBe('secret-secret-value');
+      expect(redacted.clientSecret).not.toBe('secret-client-secret-value');
+      expect(redacted.cid).not.toBe('A00');
+      expect(redacted.medicalData).not.toBe('sensitive-medical-report');
+      expect(redacted.diagnosis).not.toBe('depression');
+      expect(redacted.biometricTemplate).not.toBe('binary-biometric-vector-data');
+      expect(redacted.embedding).not.toBe('float-embedding-vector');
+      expect(redacted.selfie).not.toBe('base64-selfie-data');
+      expect(redacted.faceImage).not.toBe('base64-face-image-data');
+
+      // Verify specific mask patterns are correct
+      expect(redacted.cpf).toBe('***.***.***-01');
+      expect(redacted.pis).toBe('***.***.***-00');
+
+      expect(redacted.authorization).toBe('[REDACTED]');
+      expect(redacted.cookie).toBe('[REDACTED]');
+      expect(redacted.apiKey).toBe('[REDACTED]');
+      expect(redacted.apikey).toBe('[REDACTED]');
+      expect(redacted.token).toBe('[REDACTED]');
+      expect(redacted.accessToken).toBe('[REDACTED]');
+      expect(redacted.refreshToken).toBe('[REDACTED]');
+      expect(redacted.password).toBe('[REDACTED]');
+      expect(redacted.secret).toBe('[REDACTED]');
+      expect(redacted.clientSecret).toBe('[REDACTED]');
+      expect(redacted.cid).toBe('[REDACTED]');
+      expect(redacted.medicalData).toBe('[REDACTED]');
+      expect(redacted.diagnosis).toBe('[REDACTED]');
+      expect(redacted.biometricTemplate).toBe('[REDACTED]');
+      expect(redacted.embedding).toBe('[REDACTED]');
+      expect(redacted.selfie).toBe('[REDACTED]');
+      expect(redacted.faceImage).toBe('[REDACTED]');
+    });
   });
 
   describe('4. PWA Offline Replay & Sequencing', () => {

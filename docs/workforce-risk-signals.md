@@ -7,7 +7,7 @@ Esta documentação descreve a arquitetura, regras de cálculo e aviso legal da 
 ## 1. Contexto e Classificação
 Esta funcionalidade fornece indicadores auxiliares para ajudar gestores e profissionais de Recursos Humanos a monitorar e apoiar a retenção da equipe.
 * **Classificação Técnica**: Heurística de Risco Operacional.
-* **Inteligência Artificial**: Esta funcionalidade **não** utiliza modelos generativos ou de caixa-preta baseados em redes neurais profundas na produção para predizer desligamentos de forma autônoma. Todo cálculo é baseado em pesos estatísticos simples determinados a partir dos dados do colaborador.
+* **Inteligência Artificial**: Esta funcionalidade **não** utiliza modelos generativos ou de caixa-preta baseados em redes neurais profundas na produção para predizer desligamentos de forma autônoma. Todo cálculo é baseado em pesos heurísticos simples determinados a partir dos dados do colaborador.
 * **Revisão Humana Obrigatória**: Esta funcionalidade é puramente consultiva, exigindo avaliação manual direta e proibindo o uso isolado para tomada de decisões disciplinares, promocionais, demissionais ou contratuais.
 
 ---
@@ -45,7 +45,7 @@ O score inicial de linha de base é **15%**. A pontuação final é limitada ao 
 `GET /api/employees/:id/workforce-risk-signals`
 Retorna os fatores calculados com weights e observedValue.
 
-### Rota Legada (Alias Depreciado):
+### Rota Legada (Alias Deprecado):
 `GET /api/employees/:id/turnover-risk`
 Mantida exclusivamente para retrocompatibilidade com clientes legados. Delegada internamente para o mesmo serviço, retornando ambos os formatos para evitar quebras. Marcada no código como `@deprecated`.
 

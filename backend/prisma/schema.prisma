@@ -326,6 +326,8 @@ model AbsenceRecord {
   days                 Int
   type                 AbsenceType
   status               AbsenceStatus
+  externalCalendarEventId String?
+  externalCalendarProvider String?
   createdByUserId      String
   createdByUser        User               @relation("CreatedByUserToAbsence", fields: [createdByUserId], references: [id])
   createdAt            DateTime           @default(now())

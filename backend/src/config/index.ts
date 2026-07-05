@@ -13,4 +13,14 @@ export const config = {
   internalJobSecret: env.INTERNAL_JOB_SECRET,
   whatsappLogRetentionDays: env.WHATSAPP_LOG_RETENTION_DAYS,
   auditLogRetentionDays: env.AUDIT_LOG_RETENTION_DAYS,
+  google: {
+    clientId: env.GOOGLE_CLIENT_ID,
+    clientSecret: env.GOOGLE_CLIENT_SECRET,
+    redirectUri: env.GOOGLE_OAUTH_REDIRECT_URI || `${env.APP_BASE_URL}/api/calendar/oauth/GOOGLE/callback`,
+  },
+  microsoft: {
+    clientId: env.MICROSOFT_CLIENT_ID,
+    clientSecret: env.MICROSOFT_CLIENT_SECRET,
+    redirectUri: env.MICROSOFT_OAUTH_REDIRECT_URI || `${env.APP_BASE_URL}/api/calendar/oauth/MICROSOFT/callback`,
+  },
 };

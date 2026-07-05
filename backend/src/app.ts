@@ -47,6 +47,7 @@ import complianceRoutes from './routes/compliance';
 import hourBankRoutes from './routes/hour-bank';
 import leavesRoutes from './routes/leaves';
 import calendarRoutes from './routes/calendar';
+import calendarOAuthRoutes from './routes/calendar-oauth';
 import employeePortalRoutes from './routes/employee-portal';
 import { prisma } from './lib/prisma';
 import { redis } from './lib/redis';
@@ -374,6 +375,7 @@ export function buildApp() {
   app.register(hourBankRoutes, { prefix: '/api' });
   app.register(leavesRoutes, { prefix: '/api' });
   app.register(calendarRoutes, { prefix: '/api' });
+  app.register(calendarOAuthRoutes, { prefix: '/api' });
   app.register(employeePortalRoutes, { prefix: '/api' });
 
   if (env.NODE_ENV === 'test') {

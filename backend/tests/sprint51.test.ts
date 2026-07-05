@@ -276,19 +276,28 @@ describe('PresençaFlow RH - Sprint 51 (Custom Mappings, Self-Service Portal, Tu
       expect(body.data).toBeNull();
     });
 
-    it('should connect and save OAuth credentials successfully', async () => {
-      const payload = {
-        provider: 'GOOGLE',
-        accessToken: 'ya29.a0AfH6SM...token',
-      };
+    it('reflects an OAuth-connected integration once the token exchange has completed', async () => {
+      // The manual "paste your access token" endpoint was removed in favor of a
+      // real OAuth2 authorization-code flow (see calendar-oauth.test.ts). Here we
+      // only assert that a CalendarIntegration record produced by that flow (or by
+      // a provider's token exchange) is correctly reported back to the tenant.
+      await prisma.calendarIntegration.create({
+        data: {
+          companyId: company.id,
+          provider: 'GOOGLE',
+          accessToken: 'ya29.a0AfH6SM...token',
+          refreshToken: '1//refresh-token',
+          expiresAt: new Date(Date.now() + 3600 * 1000),
+          isActive: true,
+        },
+      });
 
       const response = await app.inject({
-        method: 'POST',
+        method: 'GET',
         url: '/api/calendar/integration',
         headers: {
           Authorization: `Bearer ${adminToken}`,
         },
-        payload,
       });
 
       expect(response.statusCode).toBe(200);
@@ -296,6 +305,8 @@ describe('PresençaFlow RH - Sprint 51 (Custom Mappings, Self-Service Portal, Tu
       expect(body.success).toBe(true);
       expect(body.data.provider).toBe('GOOGLE');
       expect(body.data.isActive).toBe(true);
+
+      await prisma.calendarIntegration.deleteMany({ where: { companyId: company.id } });
     });
   });
 });

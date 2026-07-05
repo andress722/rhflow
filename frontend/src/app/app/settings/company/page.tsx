@@ -3,7 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { Sliders, ShieldAlert, CheckCircle, Info, HelpCircle } from 'lucide-react';
 import { api } from '@/lib/api';
-import { getUser } from '@/lib/auth';
+import { getUser, getToken } from '@/lib/auth';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 export default function CompanySettingsPage() {
   const [user, setUser] = useState<any>(null);
@@ -50,6 +52,17 @@ export default function CompanySettingsPage() {
       fetchSettings();
     } else {
       setIsLoading(false);
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const calendarStatus = params.get('calendar');
+    if (calendarStatus === 'connected') {
+      setSuccessMsg('Calendário conectado com sucesso!');
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (calendarStatus === 'error') {
+      const reason = params.get('reason') || 'desconhecido';
+      setError(`Falha ao conectar calendário (motivo: ${reason}).`);
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
 
@@ -493,64 +506,77 @@ export default function CompanySettingsPage() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-bold text-slate-200">Provedor de Agenda</label>
-                <select
-                  value={calendarConfig.provider}
-                  onChange={(e) => setCalendarConfig({ ...calendarConfig, provider: e.target.value })}
-                  className="block w-full px-4 py-2 mt-1 rounded-lg bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
-                >
-                  <option value="GOOGLE">Google Workspace Calendar</option>
-                  <option value="MICROSOFT">Microsoft Outlook 365</option>
-                </select>
+            {calendarConfig.isActive ? (
+              <div className="rounded-lg border border-slate-800 bg-slate-950 px-4 py-3">
+                <p className="text-xs text-slate-300">
+                  Conectado a <span className="font-semibold text-white">{calendarConfig.provider === 'GOOGLE' ? 'Google Workspace Calendar' : 'Microsoft Outlook 365'}</span>.
+                </p>
               </div>
+            ) : (
+              <p className="text-xs text-slate-500">Nenhum calendário conectado. Escolha um provedor para autorizar o acesso via OAuth2.</p>
+            )}
 
-              <div>
-                <label className="block text-sm font-bold text-slate-200">Access Token de Autenticação</label>
-                <input
-                  type="password"
-                  placeholder="Insira o token OAuth2..."
-                  value={calendarConfig.accessToken || ''}
-                  onChange={(e) => setCalendarConfig({ ...calendarConfig, accessToken: e.target.value })}
-                  className="block w-full px-4 py-2 mt-1 rounded-lg bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-4 pt-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  setError('');
-                  setSuccessMsg('');
-                  const res = await api.post('/calendar/integration', {
-                    provider: calendarConfig.provider,
-                    accessToken: calendarConfig.accessToken || 'mock-token-123',
-                  });
-                  if (res.success) {
-                    setCalendarConfig(res.data);
-                    setSuccessMsg('Integração de calendário atualizada com sucesso!');
-                  }
-                }}
-                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer"
-              >
-                Conectar e Salvar
-              </button>
+            <div className="flex flex-wrap gap-4 pt-2">
+              {!calendarConfig.isActive && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const token = getToken();
+                      window.location.href = `${API_URL}/calendar/oauth/GOOGLE/start?token=${encodeURIComponent(token || '')}`;
+                    }}
+                    className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer"
+                  >
+                    Conectar Google Agenda
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const token = getToken();
+                      window.location.href = `${API_URL}/calendar/oauth/MICROSOFT/start?token=${encodeURIComponent(token || '')}`;
+                    }}
+                    className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer"
+                  >
+                    Conectar Outlook 365
+                  </button>
+                </>
+              )}
 
               {calendarConfig.isActive && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const res: any = await api.post('/calendar/integration/sync-test', {});
-                    if (res.success) {
-                      setSyncTestMessage(res.message);
-                    }
-                  }}
-                  className="px-4 py-2 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-350 text-xs font-semibold cursor-pointer"
-                >
-                  Testar Sincronização
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setSyncTestMessage('');
+                      const res: any = await api.post('/calendar/integration/sync-test', {});
+                      if (res.success) {
+                        setSyncTestMessage(res.message);
+                      } else {
+                        setSyncTestMessage(res.error?.message || 'Falha ao testar conexão.');
+                      }
+                    }}
+                    className="px-4 py-2 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-350 text-xs font-semibold cursor-pointer"
+                  >
+                    Testar Conexão
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setError('');
+                      setSuccessMsg('');
+                      const res: any = await api.post('/calendar/disconnect', {});
+                      if (res.success) {
+                        setCalendarConfig({ provider: 'GOOGLE', accessToken: '', isActive: false });
+                        setSuccessMsg('Calendário desconectado.');
+                      } else {
+                        setError(res.error?.message || 'Erro ao desconectar calendário.');
+                      }
+                    }}
+                    className="px-4 py-2 rounded-lg bg-rose-900/40 hover:bg-rose-900/60 text-rose-300 text-xs font-semibold cursor-pointer"
+                  >
+                    Desconectar
+                  </button>
+                </>
               )}
             </div>
 

@@ -8,7 +8,7 @@ Esta documentação detalha as etapas de verificação e os testes integrados re
 
 | Gap Identificado | Resolução Aplicada | Arquivo Principal | Status Final |
 | :--- | :--- | :--- | :--- |
-| **Nomenclatura do Workforce Risk Signals** | Criado `WorkforceRiskSignalsService` com rota semântica `/api/employees/:id/workforce-risk-signals`. Rota `/turnover-risk` depreciada. | [employees.ts](file:///e:/RHFLOW/rhflow/backend/src/routes/employees.ts) | COMPLETE |
+| **Nomenclatura do Workforce Risk Signals** | Criado `WorkforceRiskSignalsService` com rota semântica `/api/employees/:id/workforce-risk-signals`. Rota `/turnover-risk` deprecada. | [employees.ts](file:///e:/RHFLOW/rhflow/backend/src/routes/employees.ts) | COMPLETE |
 | **Integridade de Logs PII** | Criado filtro centralizado `redactPII` que higieniza e mascara CPF (`***.***.***-XX`), PIS, dados médicos e tokens de autorização. | [pii-redactor.ts](file:///e:/RHFLOW/rhflow/backend/src/lib/pii-redactor.ts) | COMPLETE |
 | **Prevenção contra Formula Injection** | Células CSV começando por `=`, `+`, `-`, ou `@` recebem prefixo de apóstrofo `'` no escape do relatório operacional. | [reports.service.ts](file:///e:/RHFLOW/rhflow/backend/src/services/reports.service.ts) | COMPLETE |
 | **Validação MIME de Importação** | Adicionado validação estrita de MIME type (`text/csv`) e extensão de arquivo (`.csv`) no upload em lote de colaboradores. | [employees.ts](file:///e:/RHFLOW/rhflow/backend/src/routes/employees.ts) | COMPLETE |

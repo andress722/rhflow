@@ -152,9 +152,18 @@ export default async function leavesRoutes(fastify: FastifyInstance) {
         return updatedRequest;
       });
 
-      // Trigger calendar synchronization asynchronously (fire-and-forget)
-      CalendarSyncService.syncLeaveEvent(id, companyId).catch((err) => {
-        console.error(`Asynchronous calendar sync failed for leaveRequestId: ${id}`, err);
+      // Trigger calendar synchronization asynchronously (fire-and-forget).
+      // A calendar provider failure must never fail the leave approval itself:
+      // the domain transaction above has already committed.
+      const correlationId = (request as any).correlationId as string | undefined;
+      CalendarSyncService.syncLeaveEvent(id, companyId, { correlationId }).catch((err) => {
+        console.error(JSON.stringify({
+          event: 'CALENDAR_SYNC_UNCAUGHT_ERROR',
+          leaveRequestId: id,
+          companyId,
+          correlationId,
+          error: String(err),
+        }));
       });
 
       return reply.status(200).send({

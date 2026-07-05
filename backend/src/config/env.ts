@@ -41,6 +41,12 @@ const envSchema = z.object({
   ENABLE_COMMERCIAL_EMAIL_ALERTS: z.preprocess(val => val === 'true' || val === true, z.boolean()).default(false),
   ENABLE_COMMERCIAL_WHATSAPP_ALERTS: z.preprocess(val => val === 'true' || val === true, z.boolean()).default(false),
   COMMERCIAL_DAILY_SUMMARY_TIME: z.string().regex(/^\d{2}:\d{2}$/, 'COMMERCIAL_DAILY_SUMMARY_TIME deve estar no formato HH:mm').default('18:00'),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().optional(),
+  MICROSOFT_CLIENT_ID: z.string().optional(),
+  MICROSOFT_CLIENT_SECRET: z.string().optional(),
+  MICROSOFT_OAUTH_REDIRECT_URI: z.string().optional(),
 });
 
 export function validateEnv(processEnv: NodeJS.ProcessEnv = process.env) {

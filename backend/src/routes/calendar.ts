@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../lib/prisma';
-import { z } from 'zod';
 import { requireRole } from '../lib/auth-middleware';
+import { CalendarSyncService } from '../services/calendar-sync.service';
 
 export default async function calendarRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', fastify.authenticate);
@@ -20,54 +20,14 @@ export default async function calendarRoutes(fastify: FastifyInstance) {
     });
   });
 
-  // POST /api/calendar/integration (Setup/Activate calendar oauth credentials)
-  fastify.post('/calendar/integration', { preHandler: [requireRole(['ADMIN', 'HR'])] }, async (request, reply) => {
-    const { companyId } = request.user;
-
-    const schema = z.object({
-      provider: z.enum(['GOOGLE', 'MICROSOFT']),
-      accessToken: z.string().min(5),
-      refreshToken: z.string().optional()
-    });
-
-    const parsed = schema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.status(400).send({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Configurações de integração inválidas.' }
-      });
-    }
-
-    const { provider, accessToken, refreshToken } = parsed.data;
-
-    const integration = await prisma.calendarIntegration.upsert({
-      where: { companyId },
-      create: {
-        companyId,
-        provider,
-        accessToken,
-        refreshToken: refreshToken || null,
-        expiresAt: new Date(Date.now() + 3600 * 1000), // Mock 1h expiry
-        isActive: true
-      },
-      update: {
-        provider,
-        accessToken,
-        refreshToken: refreshToken || null,
-        expiresAt: new Date(Date.now() + 3600 * 1000),
-        isActive: true
-      }
-    });
-
-    return reply.status(200).send({
-      success: true,
-      data: integration
-    });
-  });
-
-  // POST /api/calendar/integration/sync-test (Simulates calendar sync webhook)
+  // POST /api/calendar/integration/sync-test
+  // Performs a REAL connectivity check against the configured provider by
+  // forcing a token refresh/validation. It never claims that events were
+  // synced: this route does not sync anything by itself, it only reports
+  // whether the stored credentials are currently usable.
   fastify.post('/calendar/integration/sync-test', { preHandler: [requireRole(['ADMIN', 'HR'])] }, async (request, reply) => {
     const { companyId } = request.user;
+    const correlationId = (request as any).correlationId as string | undefined;
 
     const integration = await prisma.calendarIntegration.findUnique({
       where: { companyId }
@@ -80,16 +40,25 @@ export default async function calendarRoutes(fastify: FastifyInstance) {
       });
     }
 
-    // Mock syncing vacations or schedules to calendars
-    const syncedEventsCount = 5; 
-    
+    const token = await CalendarSyncService.refreshIfNeeded(companyId, { correlationId });
+
+    if (!token) {
+      return reply.status(502).send({
+        success: false,
+        error: {
+          code: 'CALENDAR_TOKEN_INVALID',
+          message: 'Não foi possível validar o token com o provedor. A integração pode ter sido revogada.',
+        }
+      });
+    }
+
     return reply.status(200).send({
       success: true,
-      message: `Sincronização com o ${integration.provider} finalizada. ${syncedEventsCount} eventos atualizados.`,
+      message: `Conexão com ${integration.provider} validada com sucesso. O token de acesso está ativo.`,
       data: {
         provider: integration.provider,
-        syncedEventsCount,
-        timestamp: new Date()
+        tokenValid: true,
+        checkedAt: new Date(),
       }
     });
   });
