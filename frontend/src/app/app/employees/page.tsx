@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Edit, ShieldAlert, UserX, Check, AlertCircle, Sparkles } from 'lucide-react';
+import { Plus, Search, Filter, Edit, ShieldAlert, UserX, Check, AlertCircle, Sparkles, FileSpreadsheet } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getUser } from '@/lib/auth';
 import PlanErrorAlert from '@/components/PlanErrorAlert';
+import Link from 'next/link';
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<any[]>([]);
@@ -381,13 +382,22 @@ export default function EmployeesPage() {
 
         {/* Create button (ADMIN/HR only) */}
         {canModify && (
-          <button
-            onClick={handleOpenCreateModal}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm transition-all shadow-md shadow-indigo-600/15"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Novo Funcionário</span>
-          </button>
+          <div className="flex gap-3">
+            <Link
+              href="/app/employees/import/v2"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-350 hover:text-white font-medium text-sm transition-all shadow-md cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-indigo-400" />
+              <span>Importar Lote</span>
+            </Link>
+            <button
+              onClick={handleOpenCreateModal}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm transition-all shadow-md shadow-indigo-600/15"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Novo Funcionário</span>
+            </button>
+          </div>
         )}
       </div>
 

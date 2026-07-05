@@ -36,6 +36,9 @@ import adminAnalyticsRoutes from './routes/admin-analytics';
 import telemetryRoutes from './routes/telemetry';
 import notificationsRoutes from './routes/notifications';
 import adminNotificationsRoutes from './routes/admin-notifications';
+import notificationPoliciesRoutes from './routes/notification-policies';
+import notificationWorkflowsRoutes from './routes/notification-workflows';
+import notificationQuietHoursRoutes from './routes/notification-quiet-hours';
 import executiveReportsRoutes from './routes/executive-reports';
 import auditLogsRoutes from './routes/audit-logs';
 import aiRoutes from './routes/ai';
@@ -48,7 +51,11 @@ import hourBankRoutes from './routes/hour-bank';
 import leavesRoutes from './routes/leaves';
 import calendarRoutes from './routes/calendar';
 import calendarOAuthRoutes from './routes/calendar-oauth';
+import { NotificationEngineService } from './modules/notification-engine/notification-engine.service';
 import employeePortalRoutes from './routes/employee-portal';
+import importJobsRoutes from './routes/import-jobs';
+import importMappingTemplatesRoutes from './routes/import-mapping-templates';
+import { stopImportWorker } from './lib/import-worker';
 import { prisma } from './lib/prisma';
 import { redis } from './lib/redis';
 import { env } from './config/env';
@@ -162,6 +169,25 @@ function logOperationalErrorAsync(
           metadata: sanitizedMeta,
         },
       });
+
+      // OPERATIONAL_INCIDENT_OPENED only applies to tenant-scoped 5xx errors —
+      // platform-wide errors (companyId=null) have no tenant to scope a
+      // NotificationPolicy to, and are surfaced via the Command Center instead.
+      if (companyId && statusCode >= 500) {
+        NotificationEngineService.processDomainEvent({
+          companyId,
+          eventType: 'OPERATIONAL_INCIDENT_OPENED',
+          eventId: `${requestId}`,
+          aggregateType: 'OperationalErrorLog',
+          aggregateId: requestId,
+          priority: 'HIGH',
+          correlationId,
+          context: { route, errorCode },
+          defaultTitle: 'Incidente operacional registrado',
+          defaultMessage: `Um erro ${statusCode} foi registrado na rota ${route}.`,
+          actionUrl: '/app/admin/notifications',
+        }).catch(() => undefined);
+      }
     } catch (err) {
       // Failure to write to operational log must never throw or create another log
       console.error('Failed to save operational error log:', err);
@@ -363,6 +389,9 @@ export function buildApp() {
   app.register(adminAnalyticsRoutes, { prefix: '/api' });
   app.register(telemetryRoutes, { prefix: '/api' });
   app.register(notificationsRoutes, { prefix: '/api' });
+  app.register(notificationPoliciesRoutes, { prefix: '/api' });
+  app.register(notificationWorkflowsRoutes, { prefix: '/api' });
+  app.register(notificationQuietHoursRoutes, { prefix: '/api' });
   app.register(adminNotificationsRoutes, { prefix: '/api' });
   app.register(executiveReportsRoutes, { prefix: '/api' });
   app.register(auditLogsRoutes, { prefix: '/api' });
@@ -377,6 +406,8 @@ export function buildApp() {
   app.register(calendarRoutes, { prefix: '/api' });
   app.register(calendarOAuthRoutes, { prefix: '/api' });
   app.register(employeePortalRoutes, { prefix: '/api' });
+  app.register(importJobsRoutes, { prefix: '/api' });
+  app.register(importMappingTemplatesRoutes, { prefix: '/api' });
 
   if (env.NODE_ENV === 'test') {
     app.get('/api/test-error-leak', async () => {
@@ -386,6 +417,8 @@ export function buildApp() {
 
   // Graceful shutdown hooks
   app.addHook('onClose', async () => {
+    app.log.info('Stopping Import Worker...');
+    stopImportWorker();
     app.log.info('Closing Prisma and Redis client connections...');
     await prisma.$disconnect();
     await redis.quit();

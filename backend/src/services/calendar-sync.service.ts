@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { redactPII } from '../lib/pii-redactor';
+import { NotificationEngineService } from '../modules/notification-engine/notification-engine.service';
 
 type SyncLogger = {
   correlationId?: string;
@@ -245,6 +246,19 @@ export class CalendarSyncService {
       return eventId;
     } catch (err) {
       log('CALENDAR_SYNC_FAILED', { companyId, leaveId, provider: integration.provider, error: String(err) }, ctx);
+      NotificationEngineService.processDomainEvent({
+        companyId,
+        eventType: 'CALENDAR_SYNC_FAILED',
+        eventId: `${leaveId}-calendar-sync-failure`,
+        aggregateType: 'CalendarIntegration',
+        aggregateId: leaveId,
+        priority: 'LOW',
+        correlationId: ctx?.correlationId,
+        context: { provider: integration.provider },
+        defaultTitle: 'Falha na sincronização com o calendário',
+        defaultMessage: `Não foi possível sincronizar um evento de afastamento com ${integration.provider}. A aprovação em si não foi afetada.`,
+        actionUrl: '/app/settings/company',
+      }).catch(() => undefined);
       return null;
     }
   }

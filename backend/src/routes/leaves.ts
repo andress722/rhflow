@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireRole } from '../lib/auth-middleware';
 import { AbsenceStatus, AbsenceType } from '@prisma/client';
 import { CalendarSyncService } from '../services/calendar-sync.service';
+import { NotificationEngineService } from '../modules/notification-engine/notification-engine.service';
 
 export default async function leavesRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', fastify.authenticate);
@@ -74,6 +75,22 @@ export default async function leavesRoutes(fastify: FastifyInstance) {
       }
     });
 
+    // Fire-and-forget: a notification failure must never fail leave creation.
+    const correlationId = (request as any).correlationId as string | undefined;
+    NotificationEngineService.processDomainEvent({
+      companyId,
+      eventType: 'LEAVE_REQUEST_CREATED',
+      eventId: leave.id,
+      aggregateType: 'LeaveRequest',
+      aggregateId: leave.id,
+      priority: 'NORMAL',
+      correlationId,
+      context: { employeeId: employee.id, employeeName: employee.fullName, startDate: leave.startDate.toISOString(), endDate: leave.endDate.toISOString(), leaveType: leave.type },
+      defaultTitle: 'Nova solicitação de férias/afastamento',
+      defaultMessage: `${employee.fullName} solicitou um período de afastamento.`,
+      actionUrl: `/app/employees/${employee.id}`,
+    }).catch((err) => console.error(JSON.stringify({ event: 'NOTIFICATION_ENGINE_TRIGGER_FAILED', eventType: 'LEAVE_REQUEST_CREATED', leaveId: leave.id, error: String(err) })));
+
     return reply.status(201).send({
       success: true,
       data: leave
@@ -86,7 +103,8 @@ export default async function leavesRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
 
     const leave = await prisma.leaveRequest.findFirst({
-      where: { id, companyId }
+      where: { id, companyId },
+      include: { employee: { select: { id: true, fullName: true } } },
     });
 
     if (!leave) {
@@ -166,6 +184,20 @@ export default async function leavesRoutes(fastify: FastifyInstance) {
         }));
       });
 
+      NotificationEngineService.processDomainEvent({
+        companyId,
+        eventType: 'LEAVE_REQUEST_APPROVED',
+        eventId: id,
+        aggregateType: 'LeaveRequest',
+        aggregateId: id,
+        priority: 'NORMAL',
+        correlationId,
+        context: { employeeId: leave.employeeId, employeeName: leave.employee.fullName, startDate: leave.startDate.toISOString(), endDate: leave.endDate.toISOString() },
+        defaultTitle: 'Solicitação de afastamento aprovada',
+        defaultMessage: `Sua solicitação de afastamento foi aprovada.`,
+        actionUrl: `/app/employee-portal`,
+      }).catch((err) => console.error(JSON.stringify({ event: 'NOTIFICATION_ENGINE_TRIGGER_FAILED', eventType: 'LEAVE_REQUEST_APPROVED', leaveId: id, error: String(err) })));
+
       return reply.status(200).send({
         success: true,
         data: updated
@@ -196,7 +228,8 @@ export default async function leavesRoutes(fastify: FastifyInstance) {
     }
 
     const leave = await prisma.leaveRequest.findFirst({
-      where: { id, companyId }
+      where: { id, companyId },
+      include: { employee: { select: { id: true, fullName: true } } },
     });
 
     if (!leave) {
@@ -222,6 +255,21 @@ export default async function leavesRoutes(fastify: FastifyInstance) {
         reviewedAt: new Date()
       }
     });
+
+    const correlationId = (request as any).correlationId as string | undefined;
+    NotificationEngineService.processDomainEvent({
+      companyId,
+      eventType: 'LEAVE_REQUEST_REJECTED',
+      eventId: id,
+      aggregateType: 'LeaveRequest',
+      aggregateId: id,
+      priority: 'NORMAL',
+      correlationId,
+      context: { employeeId: leave.employeeId, employeeName: leave.employee.fullName, reason: parsed.data.reason },
+      defaultTitle: 'Solicitação de afastamento rejeitada',
+      defaultMessage: `Sua solicitação de afastamento foi rejeitada. Motivo: ${parsed.data.reason}`,
+      actionUrl: `/app/employee-portal`,
+    }).catch((err) => console.error(JSON.stringify({ event: 'NOTIFICATION_ENGINE_TRIGGER_FAILED', eventType: 'LEAVE_REQUEST_REJECTED', leaveId: id, error: String(err) })));
 
     return reply.status(200).send({
       success: true,

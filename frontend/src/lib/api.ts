@@ -114,6 +114,14 @@ class ApiClient {
     });
   }
 
+  public put<T = any>(path: string, body?: any, options?: RequestInit) {
+    return this.request<T>(path, {
+      ...options,
+      method: 'PUT',
+      body: body !== undefined ? JSON.stringify(body) : JSON.stringify({}),
+    });
+  }
+
   public delete<T = any>(path: string, options?: RequestInit) {
     return this.request<T>(path, { ...options, method: 'DELETE' });
   }

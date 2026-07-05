@@ -26,6 +26,11 @@ Esta matriz fornece o mapeamento consolidado e auditado do estado de todas as 20
 | **Health Liveness** | COMPLETE | NOT_APPLICABLE | COMPLETE | COMPLETE | COMPLETE | NOT_APPLICABLE | Rota `/api/health/live` estática sem acoplamento a banco ou Redis. | COMPLETE |
 | **Health Readiness** | COMPLETE | NOT_APPLICABLE | COMPLETE | COMPLETE | COMPLETE | NOT_APPLICABLE | Rota `/api/health/ready` com pings rápidos e timeout curto para DB/Redis. | COMPLETE |
 | **Job Locking** | COMPLETE | NOT_APPLICABLE | COMPLETE | COMPLETE | COMPLETE | NOT_APPLICABLE | Trava com token UUID de propriedade e liberação via script Lua no Redis. | COMPLETE |
+| **Notification Engine (Sprint 54)** | COMPLETE | COMPLETE | COMPLETE | COMPLETE | COMPLETE | NEEDS_HOMOLOGATION | Motor de escalonamento evento-driven com 8 eventos ACTIVE, policy builder, quiet hours, dedup/idempotência tenant-safe. | NEEDS_HOMOLOGATION |
+| **Importador Corporativo V2 (CSV)** | COMPLETE | COMPLETE | COMPLETE | COMPLETE | COMPLETE | NOT_APPLICABLE | Upload assíncrono com delimitadores auto e fila Redis. | COMPLETE |
+| **Importador Corporativo V2 (XLSX)** | COMPLETE | COMPLETE | COMPLETE | COMPLETE | COMPLETE | NOT_APPLICABLE | Parser SheetJS com suporte a worksheets e fórmulas ignoradas. | COMPLETE |
+| **Templates de Mapeamento** | COMPLETE | COMPLETE | COMPLETE | COMPLETE | COMPLETE | NOT_APPLICABLE | Persistência de templates JSON por empresa com controle tenant-safe. | COMPLETE |
+| **Auto-Mapping Heurístico** | COMPLETE | COMPLETE | NOT_APPLICABLE | COMPLETE | COMPLETE | NOT_APPLICABLE | Normalização de acentos e aliases de propriedades corporativas. | COMPLETE |
 
 ---
 
@@ -82,3 +87,10 @@ Esta matriz fornece o mapeamento consolidado e auditado do estado de todas as 20
 
 ### 12. Job Locking
 - **Lock**: Mecanismo que gera tokens baseados em UUID e executa exclusões atômicas via script Lua no Redis para evitar que workers lentos interfiram em locks renovados.
+
+### 13. Importador Corporativo V2 & Mapping Templates (Sprint 53)
+- **Serviço**: [import-job.service.ts](file:///e:/RHFLOW/rhflow/backend/src/services/import-job.service.ts)
+- **Rotas**: `POST /api/import-jobs/upload`, `PUT /api/import-jobs/:jobId/mapping`, `POST /api/import-jobs/:jobId/confirm`, `GET /api/import-jobs/:jobId/progress` e CRUD de templates em [import-mapping-templates.ts](file:///e:/RHFLOW/rhflow/backend/src/routes/import-mapping-templates.ts).
+- **Segurança**: Validação por Magic Bytes PK Zip para XLSX, limites estritos de 5000 linhas, escape contra injeção de fórmulas e isolamento multitenant rígido.
+- **Testes**: Suíte dedicada `tests/sprint53-import.test.ts` cobrindo todas as 11 categorias de validação e concorrência com 100% de aproveitamento.
+

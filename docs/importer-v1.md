@@ -1,6 +1,7 @@
 # Importador de Colaboradores V1 - Especificações de Segurança e Robusteza
 
-Esta documentação descreve as regras de negócio, limites operacionais, validações de MIME e proteção contra injeção de fórmulas no Importador Inteligente V1.
+> [!NOTE]
+> **Aviso de Depreciação Parcial**: O Importador V1 (síncrono e limitado a CSVs de 500 linhas) foi parcialmente depreciado a partir da Sprint 53. Para novas implementações ou fluxos corporativos assíncronos que necessitem de XLSX e templates de mapeamento, consulte a documentação do [Importador Corporativo V2](file:///e:/RHFLOW/rhflow/docs/importer-v2-enterprise.md).
 
 ---
 

@@ -195,7 +195,7 @@ export async function getOnboardingData(companyId: string) {
       label: 'Funcionários Importados',
       completed: employeesImported,
       required: true,
-      actionUrl: '/app/employees',
+      actionUrl: '/app/employees/import/v2',
       description: 'Cadastre ou importe os funcionários ativos do piloto.'
     },
     {

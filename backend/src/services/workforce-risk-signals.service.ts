@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma';
+import { NotificationEngineService } from '../modules/notification-engine/notification-engine.service';
 
 export interface RiskFactor {
   code: string;
@@ -106,6 +107,24 @@ export class WorkforceRiskSignalsService {
       where: { id: employeeId },
       data: { turnoverRiskScore: score },
     });
+
+    if (level === 'HIGH') {
+      // HR/Admin audience only — never sent to the employee directly, and the
+      // wording must not be accusatory. The exact audience is controlled by
+      // the seeded default policy for this eventType, not by this trigger.
+      NotificationEngineService.processDomainEvent({
+        companyId,
+        eventType: 'WORKFORCE_RISK_HIGH',
+        eventId: `${employeeId}-${new Date().toISOString().slice(0, 10)}`,
+        aggregateType: 'Employee',
+        aggregateId: employeeId,
+        priority: 'HIGH',
+        context: { employeeId, employeeName: employee.fullName },
+        defaultTitle: 'Sinais de risco operacional requerem revisão humana',
+        defaultMessage: `Indicadores heurísticos de ${employee.fullName} sugerem atenção. Revisão humana é necessária antes de qualquer decisão.`,
+        actionUrl: `/app/employees/${employeeId}`,
+      }).catch(() => undefined);
+    }
 
     return {
       level,

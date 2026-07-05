@@ -14,6 +14,7 @@ import { RetentionService } from '../services/retention.service';
 import { JobRegistryService } from '../services/job-registry.service';
 import { NotificationCenterService } from '../services/notification-center.service';
 import { NotificationSeverity } from '@prisma/client';
+import { NotificationEscalationService } from '../modules/notification-engine/notification-escalation.service';
 
 const bodyCompanySchema = z.object({
   companyId: z.string().uuid().optional(),
@@ -792,6 +793,49 @@ export default async function internalJobsRoutes(fastify: FastifyInstance) {
         success: false,
         error: { code: 'JOB_ERROR', message: err.message || 'Erro no job de escalação.' },
       });
+    }
+  });
+
+  // POST /api/internal/jobs/notification-workflow-escalations/run
+  // Scheduler-scan step for the Sprint 54 event-driven Notification Engine.
+  // Distinct from /notification-escalations/run above (the LEGACY mechanism
+  // for stale in-app notifications) — the same event is never processed by
+  // both.
+  fastify.post('/internal/jobs/notification-workflow-escalations/run', async (request, reply) => {
+    const startedAt = new Date();
+    const requestId = (request.headers['x-request-id'] as string) || crypto.randomUUID();
+
+    const lockAcquired = await JobLock.acquire('NOTIFICATION_WORKFLOW_ESCALATIONS', 300000);
+    if (!lockAcquired) {
+      return reply.status(409).send({
+        success: false,
+        error: { code: 'JOB_LOCKED', message: 'Este job já está rodando em outra instância.' },
+      });
+    }
+
+    const jobRunId = await JobRegistryService.startRun('NOTIFICATION_WORKFLOW_ESCALATIONS', 'INTERNAL', requestId);
+
+    try {
+      const result = await NotificationEscalationService.scanAndAdvance();
+      const finishedAt = new Date();
+      const durationMs = finishedAt.getTime() - startedAt.getTime();
+      const status = result.evaluated === 0 ? 'SKIPPED' : 'SUCCESS';
+      await JobRegistryService.completeRun(jobRunId, status, durationMs, result as any);
+
+      return reply.status(200).send({ success: true, data: result });
+    } catch (err: any) {
+      const finishedAt = new Date();
+      const durationMs = finishedAt.getTime() - startedAt.getTime();
+      await JobRegistryService.completeRun(jobRunId, 'FAILED', durationMs, null, {
+        code: 'JOB_ERROR',
+        message: err.message || String(err),
+      });
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'JOB_ERROR', message: err.message || 'Erro no job de escalonamento do Notification Engine.' },
+      });
+    } finally {
+      await JobLock.release('NOTIFICATION_WORKFLOW_ESCALATIONS');
     }
   });
 

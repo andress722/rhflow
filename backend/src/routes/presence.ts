@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { RemoteCheckinService } from '../services/remote-checkin.service';
 import { prisma } from '../lib/prisma';
 import { EventEmitter } from 'events';
+import { NotificationEngineService } from '../modules/notification-engine/notification-engine.service';
 
 export const presenceEmitter = new EventEmitter();
 
@@ -135,6 +136,21 @@ export default async function presenceRoutes(fastify: FastifyInstance) {
         where: { offlineEventId },
       });
       if (existing) {
+        const correlationId = (request as any).correlationId as string | undefined;
+        NotificationEngineService.processDomainEvent({
+          companyId,
+          eventType: 'OFFLINE_EVENT_REJECTED',
+          eventId: `${offlineEventId}-rejected`,
+          aggregateType: 'RemoteCheckin',
+          aggregateId: id,
+          priority: 'LOW',
+          correlationId,
+          context: { employeeId: checkin.employeeId, employeeName: checkin.employee.fullName },
+          defaultTitle: 'Evento offline duplicado rejeitado',
+          defaultMessage: `Um evento de check-in offline de ${checkin.employee.fullName} foi rejeitado por já ter sido sincronizado (replay).`,
+          actionUrl: `/app/presence`,
+        }).catch(() => undefined);
+
         return reply.status(409).send({
           success: false,
           error: { code: 'DUPLICATE_EVENT', message: 'Replay de evento offline bloqueado.' },
@@ -188,6 +204,21 @@ export default async function presenceRoutes(fastify: FastifyInstance) {
       });
 
       if (!previousCheckin) {
+        const correlationId = (request as any).correlationId as string | undefined;
+        NotificationEngineService.processDomainEvent({
+          companyId,
+          eventType: 'OFFLINE_SYNC_CONFLICT',
+          eventId: `${id}-${offlineSequence}-conflict`,
+          aggregateType: 'RemoteCheckin',
+          aggregateId: id,
+          priority: 'LOW',
+          correlationId,
+          context: { employeeId: checkin.employeeId, employeeName: checkin.employee.fullName },
+          defaultTitle: 'Conflito de sincronização offline',
+          defaultMessage: `Um evento offline de ${checkin.employee.fullName} chegou fora de ordem e precisa de atenção operacional.`,
+          actionUrl: `/app/presence`,
+        }).catch(() => undefined);
+
         return reply.status(400).send({
           success: false,
           error: {

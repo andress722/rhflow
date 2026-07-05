@@ -47,6 +47,24 @@ const envSchema = z.object({
   MICROSOFT_CLIENT_ID: z.string().optional(),
   MICROSOFT_CLIENT_SECRET: z.string().optional(),
   MICROSOFT_OAUTH_REDIRECT_URI: z.string().optional(),
+  // Sprint 54 — Notification & Escalation Engine
+  NOTIFICATION_ENGINE_ENABLED: z.preprocess(val => val === 'true' || val === true, z.boolean()).default(true),
+  NOTIFICATION_ESCALATION_ENABLED: z.preprocess(val => val === 'true' || val === true, z.boolean()).default(false),
+  NOTIFICATION_QUIET_HOURS_ENABLED: z.preprocess(val => val === 'true' || val === true, z.boolean()).default(true),
+  NOTIFICATION_CHANNEL_FALLBACK_ENABLED: z.preprocess(val => val === 'true' || val === true, z.boolean()).default(true),
+  NOTIFICATION_POLICY_BUILDER_ENABLED: z.preprocess(val => val === 'true' || val === true, z.boolean()).default(true),
+  NOTIFICATION_MAX_RETRIES: z.coerce.number().int().min(0).default(3),
+  NOTIFICATION_RETRY_BASE_DELAY_SECONDS: z.coerce.number().int().min(1).default(30),
+  NOTIFICATION_RETRY_MAX_DELAY_MINUTES: z.coerce.number().int().min(1).default(15),
+  NOTIFICATION_RECIPIENT_MAX_PER_HOUR: z.coerce.number().int().min(1).default(20),
+  NOTIFICATION_EVENT_COOLDOWN_MINUTES: z.coerce.number().int().min(0).default(10),
+  NOTIFICATION_DELIVERY_RETENTION_DAYS: z.coerce.number().int().min(1).default(90),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().optional(),
+  SMTP_SECURE: z.preprocess(val => val === 'true' || val === true, z.boolean()).default(false),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
 });
 
 export function validateEnv(processEnv: NodeJS.ProcessEnv = process.env) {

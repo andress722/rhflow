@@ -245,6 +245,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       menuItems.push({ name: 'Config. Usuários', href: '/app/settings', icon: Settings });
       menuItems.push({ name: 'Config. Equipe', href: '/app/settings/team', icon: Users });
       menuItems.push({ name: 'Config. Empresa', href: '/app/settings/company', icon: Sliders });
+      menuItems.push({ name: 'Políticas de Notificação', href: '/app/settings/notification-policies', icon: Bell });
       menuItems.push({ name: 'Config. WhatsApp', href: '/app/settings/whatsapp', icon: MessageSquare });
       menuItems.push({ name: 'Logs de Auditoria', href: '/app/settings/audit-logs', icon: ShieldCheck });
       menuItems.push({ name: 'Segurança (MFA)', href: '/app/settings/mfa', icon: ShieldAlert });
