@@ -52,6 +52,8 @@ import { prisma } from './lib/prisma';
 import { redis } from './lib/redis';
 import { env } from './config/env';
 
+import { redactPII } from './lib/pii-redactor';
+
 function sanitizeString(str: string): string {
   if (!str) return '';
   const sensitiveWords = [
@@ -69,66 +71,7 @@ function sanitizeString(str: string): string {
 }
 
 function sanitizeMetadata(val: any): any {
-  if (val === null || val === undefined) return val;
-  if (typeof val === 'string') {
-    const lower = val.toLowerCase();
-    
-    if (lower.startsWith('bearer ')) {
-      return 'Bearer **********';
-    }
-    
-    const digitsOnly = val.replace(/\D/g, '');
-    if (digitsOnly.length === 11) {
-      return '***.***.***-**';
-    }
-    
-    const sensitiveWords = [
-      'authorization', 'cookie', 'set-cookie', 'password', 'currentpassword',
-      'newpassword', 'token', 'debugtoken', 'accesstoken', 'accesstokenenc',
-      'webhooksecret', 'jwt', 'secret', 'cpf', 'document', 'file',
-      'rawbody'
-    ];
-    for (const word of sensitiveWords) {
-      if (lower.includes(word)) {
-        return '[REDACTED]';
-      }
-    }
-    
-    const emailRegex = /^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$/;
-    if (emailRegex.test(val)) {
-      const parts = val.split('@');
-      const local = parts[0];
-      const domain = parts[1];
-      if (local.length > 2) {
-        return `${local[0]}***${local[local.length - 1]}@${domain}`;
-      }
-      return `***@${domain}`;
-    }
-    
-    return val;
-  }
-  if (Array.isArray(val)) {
-    return val.map(item => sanitizeMetadata(item));
-  }
-  if (typeof val === 'object') {
-    const res: any = {};
-    for (const key of Object.keys(val)) {
-      const lowerKey = key.toLowerCase();
-      const sensitiveKeys = [
-        'authorization', 'cookie', 'set-cookie', 'password', 'currentpassword',
-        'newpassword', 'token', 'debugtoken', 'accesstoken', 'accesstokenenc',
-        'webhooksecret', 'jwt', 'secret', 'cpf', 'document', 'file',
-        'rawbody', 'payload', 'body', 'tempPassword', 'confirmPassword'
-      ];
-      if (sensitiveKeys.some(k => lowerKey.includes(k))) {
-        res[key] = '[REDACTED]';
-      } else {
-        res[key] = sanitizeMetadata(val[key]);
-      }
-    }
-    return res;
-  }
-  return val;
+  return redactPII(val);
 }
 
 function logOperationalErrorAsync(
@@ -185,6 +128,7 @@ function logOperationalErrorAsync(
       const companyId = user?.companyId || (request.body as any)?.companyId || null;
       const userId = user?.sub || null;
 
+      const correlationId = request.correlationId || reply.getHeader('x-correlation-id') || requestId;
       const rawMetadata: any = {
         headers: request.headers,
         query: request.query,
@@ -192,6 +136,7 @@ function logOperationalErrorAsync(
         body: request.body,
         method: request.method,
         route,
+        correlationId,
       };
       if (errorStack) {
         rawMetadata.stack = errorStack;
@@ -227,6 +172,29 @@ export function buildApp() {
   const isTest = env.NODE_ENV === 'test';
   const app = Fastify({
     logger: isTest ? false : {
+      redact: {
+        paths: [
+          'req.headers.authorization',
+          'req.headers.cookie',
+          'req.headers.apikey',
+          'req.headers["x-api-key"]',
+          'password',
+          'token',
+          'accessToken',
+          'refreshToken',
+          'clientSecret',
+          'cpf',
+          'pis',
+          'cid',
+          'medicalData',
+          'diagnosis',
+          'biometricTemplate',
+          'embedding',
+          'selfie',
+          'faceImage'
+        ],
+        censor: '[REDACTED]'
+      },
       transport: {
         target: 'pino-pretty',
         options: {

@@ -122,6 +122,8 @@ class OfflineDB {
       offlineSequence
     });
 
+    // Note: payloadHash provides verification of integrity and detection of content inconsistency,
+    // but does not replace cryptographic authentication, HMAC, digital signature, or device-bound keys.
     const payloadHash = await this.hashPayload(rawPayloadString);
 
     const item: OfflineCheckinItem = {

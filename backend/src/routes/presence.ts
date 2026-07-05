@@ -143,6 +143,8 @@ export default async function presenceRoutes(fastify: FastifyInstance) {
     }
 
     // Validate Payload Integrity and Hashing
+    // Note: payloadHash provides verification of integrity and detection of content inconsistency,
+    // but does not replace cryptographic authentication, HMAC, digital signature, or device-bound keys.
     if (payloadHash) {
       const crypto = require('crypto');
       const rawPayloadString = JSON.stringify({
@@ -302,10 +304,27 @@ export default async function presenceRoutes(fastify: FastifyInstance) {
       'X-Accel-Buffering': 'no',
     });
 
+    let isClosed = false;
+
+    const cleanup = () => {
+      if (isClosed) return;
+      isClosed = true;
+      clearInterval(interval);
+      presenceEmitter.off('new_checkin', onNewCheckin);
+      try {
+        reply.raw.end();
+      } catch (_) {}
+    };
+
     const onNewCheckin = (data: { companyId: string; checkin: any }) => {
+      if (isClosed) return;
       // Multitenant isolation check
       if (data.companyId === companyId) {
-        reply.raw.write(`data: ${JSON.stringify(data.checkin)}\n\n`);
+        try {
+          reply.raw.write(`data: ${JSON.stringify(data.checkin)}\n\n`);
+        } catch (err) {
+          cleanup();
+        }
       }
     };
 
@@ -313,12 +332,16 @@ export default async function presenceRoutes(fastify: FastifyInstance) {
 
     // Keep-alive heartbeat every 15 seconds
     const interval = setInterval(() => {
-      reply.raw.write(': heartbeat\n\n');
+      if (isClosed) return;
+      try {
+        reply.raw.write(': heartbeat\n\n');
+      } catch (err) {
+        cleanup();
+      }
     }, 15000);
 
     request.raw.on('close', () => {
-      clearInterval(interval);
-      presenceEmitter.off('new_checkin', onNewCheckin);
+      cleanup();
     });
   });
 }

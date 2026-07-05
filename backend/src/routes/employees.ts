@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireRole } from '../lib/auth-middleware';
 import { PlanLimitsService } from '../services/plan-limits.service';
+import { WorkforceRiskSignalsService } from '../services/workforce-risk-signals.service';
 
 const workModelSchema = z.enum(['PRESENTIAL', 'REMOTE', 'HYBRID']);
 const employeeStatusSchema = z.enum(['ACTIVE', 'INACTIVE']);
@@ -767,6 +768,28 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const allowedMimes = ['text/csv', 'application/vnd.ms-excel', 'application/csv', 'text/comma-separated-values'];
+      if (!allowedMimes.includes(fileData.mimetype)) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'UPLOAD_INVALID_MIME',
+            message: 'O arquivo enviado deve ser do tipo CSV.',
+          },
+        });
+      }
+
+      const ext = fileData.filename.split('.').pop()?.toLowerCase();
+      if (ext !== 'csv') {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'UPLOAD_INVALID_MIME',
+            message: 'Apenas arquivos com extensão .csv são permitidos.',
+          },
+        });
+      }
+
       let content = '';
       try {
         const fileBuffer = await fileData.toBuffer();
@@ -1012,7 +1035,33 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // GET /api/employees/:id/turnover-risk (Estimates demission risk based on check-ins and climate surveys)
+  // GET /api/employees/:id/workforce-risk-signals (Computes heuristic risk signals based on presence logs)
+  fastify.get(
+    '/employees/:id/workforce-risk-signals',
+    { preHandler: [requireRole(['ADMIN', 'HR'])] },
+    async (request, reply) => {
+      const { companyId } = request.user;
+      const { id } = request.params as { id: string };
+
+      const signals = await WorkforceRiskSignalsService.calculate(id, companyId);
+      if (!signals) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Colaborador não encontrado.' },
+        });
+      }
+
+      return reply.status(200).send({
+        success: true,
+        data: signals,
+      });
+    }
+  );
+
+  /**
+   * @deprecated Utilizar /api/employees/:id/workforce-risk-signals.
+   * Rota mantida apenas para retrocompatibilidade com clientes integrados legados.
+   */
   fastify.get(
     '/employees/:id/turnover-risk',
     { preHandler: [requireRole(['ADMIN', 'HR'])] },
@@ -1020,106 +1069,26 @@ export default async function employeesRoutes(fastify: FastifyInstance) {
       const { companyId } = request.user;
       const { id } = request.params as { id: string };
 
-      const employee = await prisma.employee.findFirst({
-        where: { id, companyId },
-      });
-
-      if (!employee) {
+      const signals = await WorkforceRiskSignalsService.calculate(id, companyId);
+      if (!signals) {
         return reply.status(404).send({
           success: false,
           error: { code: 'NOT_FOUND', message: 'Colaborador não encontrado.' },
         });
       }
 
-      // Calculate risk heuristics in past 30 days
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000);
-
-      // 1. Absences count
-      const absencesCount = await prisma.remoteCheckin.count({
-        where: {
-          employeeId: id,
-          status: 'ABSENCE_REPORTED',
-          createdAt: { gte: thirtyDaysAgo },
-        },
-      });
-
-      // 2. Late check-ins count
-      const latesCount = await prisma.remoteCheckin.count({
-        where: {
-          employeeId: id,
-          status: 'LATE',
-          createdAt: { gte: thirtyDaysAgo },
-        },
-      });
-
-      // 3. Low climate survey responses (score <= 2)
-      const lowClimates = await prisma.pulseSurveyResponse.count({
-        where: {
-          employeeId: id,
-          score: { lte: 2 },
-          createdAt: { gte: thirtyDaysAgo },
-        },
-      });
-
-      // Base score calculation (capped at 100)
-      let baseScore = 15;
-      const factors: Array<{ code: string; description: string; weight: number }> = [];
-
-      if (absencesCount > 0) {
-        const weight = absencesCount * 20;
-        baseScore += weight;
-        factors.push({
-          code: 'ABSENCE_TREND',
-          description: `Aumento de ausências injustificadas (${absencesCount} registros nos últimos 30 dias)`,
-          weight,
-        });
-      }
-
-      if (latesCount > 0) {
-        const weight = latesCount * 8;
-        baseScore += weight;
-        factors.push({
-          code: 'LATE_TREND',
-          description: `Atrasos recorrentes detectados (${latesCount} registros nos últimos 30 dias)`,
-          weight,
-        });
-      }
-
-      if (lowClimates > 0) {
-        const weight = lowClimates * 25;
-        baseScore += weight;
-        factors.push({
-          code: 'LOW_CLIMATE_SURVEY',
-          description: `Avaliações baixas em pesquisas de clima (Pulse Surveys: ${lowClimates} nos últimos 30 dias)`,
-          weight,
-        });
-      }
-
-      const riskScore = Math.min(100, baseScore);
-      const level = riskScore <= 30 ? 'LOW' : riskScore <= 70 ? 'MODERATE' : 'HIGH';
-
-      // Update in DB
-      await prisma.employee.update({
-        where: { id },
-        data: { turnoverRiskScore: riskScore },
-      });
-
+      // Format compatibility remapping
       return reply.status(200).send({
         success: true,
         data: {
           employeeId: id,
-          turnoverRiskScore: riskScore,
-          score: riskScore,
-          level,
-          factors,
-          calculationType: 'HEURISTIC',
-          humanReviewRequired: true,
-          disclaimer: 'Os sinais apresentados são indicadores auxiliares e não devem ser utilizados isoladamente para decisões trabalhistas, disciplinares ou de desligamento.',
-          metrics: {
-            absencesCount,
-            latesCount,
-            lowClimatesCount: lowClimates,
-          },
+          turnoverRiskScore: signals.score,
+          score: signals.score,
+          level: signals.level,
+          factors: signals.factors,
+          calculationType: signals.calculationType,
+          humanReviewRequired: signals.humanReviewRequired,
+          disclaimer: signals.disclaimer,
         },
       });
     }

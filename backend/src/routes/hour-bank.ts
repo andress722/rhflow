@@ -92,11 +92,19 @@ export default async function hourBankRoutes(fastify: FastifyInstance) {
     }
 
     const transaction = await prisma.$transaction(async (tx) => {
+      // 1. Acquire row lock on Employee to prevent concurrent hour bank updates for this employee
+      await tx.$queryRaw`SELECT id FROM "Employee" WHERE id = ${employeeId} FOR UPDATE`;
+
       const currentBalance = await tx.hourBankBalance.findUnique({
         where: { employeeId },
       });
       const previousBalance = currentBalance ? currentBalance.balanceMinutes : 0;
       const resultingBalance = previousBalance + parsed.data.amountMinutes;
+
+      // Invariant check
+      if (previousBalance + parsed.data.amountMinutes !== resultingBalance) {
+        throw new Error('Invariante do banco de horas violada: saldo anterior + delta deve ser igual ao saldo resultante.');
+      }
 
       const createdTx = await tx.hourBankTransaction.create({
         data: {

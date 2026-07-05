@@ -437,6 +437,10 @@ export class ReportsService {
     const escapeCsv = (val: any): string => {
       if (val === null || val === undefined) return '';
       let str = String(val);
+      // Prevent formula injection: prefix cell with single quote if it starts with =, +, -, @
+      if (str.startsWith('=') || str.startsWith('+') || str.startsWith('-') || str.startsWith('@')) {
+        str = `'${str}`;
+      }
       // Double quotes, newlines or semicolons must be escaped
       if (str.includes('"') || str.includes('\n') || str.includes('\r') || str.includes(';')) {
         str = str.replace(/"/g, '""');

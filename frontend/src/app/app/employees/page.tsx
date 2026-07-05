@@ -71,11 +71,11 @@ export default function EmployeesPage() {
         : [];
 
       try {
-        const riskRes: any = await api.get(`/employees/${empId}/turnover-risk`);
+        const riskRes: any = await api.get(`/employees/${empId}/workforce-risk-signals`);
         if (riskRes.success && riskRes.data) {
           setSelectedEmployee((prev: any) => {
             if (prev && prev.id === empId) {
-              return { ...prev, turnoverRiskScore: riskRes.data.turnoverRiskScore };
+              return { ...prev, turnoverRiskScore: riskRes.data.score };
             }
             return prev;
           });
