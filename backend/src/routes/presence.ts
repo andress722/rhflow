@@ -303,6 +303,9 @@ export default async function presenceRoutes(fastify: FastifyInstance) {
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
     });
+    // Flush headers immediately so the client receives the 200 response
+    // without waiting for the first write() call (important for SSE detection).
+    reply.raw.flushHeaders();
 
     let isClosed = false;
 

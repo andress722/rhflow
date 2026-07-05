@@ -1,32 +1,50 @@
-# Recursos Offline PWA e Sincronização de Dados
+# PWA Shell e Recursos Offline - Status Report
 
-Este documento descreve os recursos offline, o ciclo de vida do Service Worker (PWA Shell) e a fila offline baseada em IndexedDB para controle de presença no PresençaFlow RH.
-
----
-
-## 1. PWA Shell
-O aplicativo foi estruturado utilizando princípios de Progressive Web App (PWA) para garantir resiliência visual e de navegação mesmo sob instabilidade total de rede:
-* **Manifesto PWA**: Localizado em `frontend/public/manifest.json`, define as cores, ícones, orientação e modo de exibição standalone.
-* **Service Worker**: Cacheia os assets estáticos da aplicação (código compilado do Next.js, arquivos públicos e fontes) permitindo o carregamento instantâneo do shell sem conexão com a internet.
-* **Detecção de Estado**: O estado de conectividade (`isOnline`) é monitorado continuamente no frontend através dos eventos nativos do navegador (`window.online` e `window.offline`).
+Esta documentação detalha a maturidade real de PWA (Progressive Web App) e operações offline do PresençaFlow RH.
 
 ---
 
-## 2. Operações de Negócio Offline (Fila IndexedDB)
-Quando a aplicação detecta que o usuário está desconectado, o registro de check-in remoto real não é bloqueado, sendo redirecionado para a fila segura armazenada localmente no IndexedDB do navegador.
+## 1. PWA Shell Status
 
-### Fluxo de Funcionamento:
-1. **Registro do Evento**: O usuário inicia o registro de presença offline.
-2. **Armazenamento no IndexedDB**:
-   - Gera um `offlineEventId` determinístico (UUID) para fins de rastreabilidade e replay protection.
-   - Incrementa o `offlineSequence` do dispositivo (garantindo ordem cronológica estrita).
-   - Armazena o hash do evento anterior (`previousEventHash`), gerando uma cadeia sequencial imutável.
-   - Computa o `payloadHash` (SHA-256 do payload) para detecção física de integridade.
-3. **Reconexão de Rede**: O evento `online` do navegador dispara o sync da fila.
-4. **Sincronização Sequencial**: A fila local é lida e enviada sequencialmente ao backend (`POST /api/presence/:id/simulate-response`). O item só é removido do IndexedDB após confirmação bem-sucedida do servidor (200 OK).
+O PWA Shell garante a carregabilidade e a resiliência visual da interface do usuário mesmo na ausência completa de rede.
+
+| Item | Status | Observações / Evidências |
+| :--- | :--- | :--- |
+| **manifest** | COMPLETE | Arquivo `manifest.json` presente em `frontend/public/manifest.json`. |
+| **service worker** | COMPLETE | Registro e ativação do Service Worker em `frontend/src/app/layout.tsx`. |
+| **installability** | COMPLETE | Atende aos critérios do Chrome/Lighthouse para instalação standalone no desktop e mobile. |
+| **cache** | COMPLETE | Caching de assets estáticos compilados do Next.js e recursos de UI. |
+| **fallback offline** | COMPLETE | Exibição de telas e componentes amigáveis quando o usuário está sem conectividade. |
 
 ---
 
-## 3. Limitações de Criptografia do `payloadHash`
-> [!WARNING]
-> O `payloadHash` (gerado localmente com SHA-256) fornece apenas a verificação de integridade básica e detecção de inconsistências de conteúdo durante o transporte. Ele **não** substitui a autenticação criptográfica de ponta a ponta, HMAC de canal seguro, assinatura digital com chaves assimétricas privadas ou chaves de hardware vinculadas ao dispositivo do colaborador.
+## 2. Offline Business Operation Status
+
+O Offline Business Operation refere-se ao motor de tolerância a falhas para batidas de ponto sem rede.
+
+| Item | Status | Observações / Evidências |
+| :--- | :--- | :--- |
+| **IndexedDB** | COMPLETE | Fila local implementada usando a biblioteca `indexedDB` nativa em `frontend/src/lib/offline-db.ts`. |
+| **offlineEventId** | COMPLETE | UUID gerado localmente e propagado no payload para identificação única do evento. |
+| **sequence** | COMPLETE | Sequenciador cronológico incremental local. |
+| **previousEventHash**| COMPLETE | Hash encadeado para garantir a integridade da sequência de eventos. |
+| **payloadHash** | COMPLETE | SHA-256 gerado localmente sobre os dados da batida para validar integridade do conteúdo. |
+| **sync** | COMPLETE | Mecanismo de sincronização em background ativado ao disparar o evento `online`. |
+| **idempotência** | COMPLETE | Travas contra re-execução baseadas no `offlineEventId` único. |
+| **replay protection** | COMPLETE | Backend rejeita transações repetidas com o mesmo `offlineEventId` retornando status 409 (Conflict). |
+| **persistência** | COMPLETE | Dados permanecem guardados no IndexedDB até que o sync seja completado com sucesso. |
+
+---
+
+## 3. Arquitetura Operacional Real e Limitações
+
+### Fluxo Real de Produção
+As batidas de ponto em produção são originadas primariamente via **WhatsApp webhook** integrados a parceiros oficiais de comunicação da empresa. O colaborador realiza a marcação de presença respondendo às interações do bot no WhatsApp, e o sistema recebe essa batida de forma assíncrona.
+
+### IndexedDB Queue
+A fila IndexedDB e as batidas offline no frontend são utilizadas **exclusivamente no Simulador de Batida de Ponto e em Demonstrações** do sistema. Elas não fazem parte do fluxo oficial de produção das marcações de presença reais.
+
+Por esse motivo, o status final de **Offline Business Operation** é classificado como **PARTIAL**.
+
+### Pendência de Decisão de Negócio (Residual Pending Item)
+* **BUSINESS_DECISION_PENDING**: Definir se a PWA será promovida futuramente a canal oficial de marcação de ponto direta dos colaboradores, estendendo a fila offline baseada em IndexedDB para o fluxo de produção.

@@ -11,6 +11,7 @@ import { ReportsService } from '../src/services/reports.service';
 
 describe('PresençaFlow RH - Sprint 52.1 Verification & Hardening integration Tests', () => {
   let app: any;
+  let port: number;
   let companyA: any;
   let companyB: any;
   
@@ -26,6 +27,8 @@ describe('PresençaFlow RH - Sprint 52.1 Verification & Hardening integration Te
   beforeAll(async () => {
     app = buildApp();
     await app.ready();
+    await app.listen({ port: 0, host: '127.0.0.1' });
+    port = app.server.address().port;
 
     // 1. Create two separate companies (Tenants)
     companyA = await prisma.company.create({
@@ -157,8 +160,10 @@ describe('PresençaFlow RH - Sprint 52.1 Verification & Hardening integration Te
       where: { id: { in: [companyA.id, companyB.id] } }
     });
 
+    // Close all open SSE connections before shutting down to avoid afterAll timeout
+    try { (app.server as any).closeAllConnections?.(); } catch (_) {}
     await app.close();
-  });
+  }, 20000);
 
   describe('1. Cross-Tenant Isolation checks', () => {
     it('should block employee portal access to other tenants data', async () => {
@@ -216,6 +221,40 @@ describe('PresençaFlow RH - Sprint 52.1 Verification & Hardening integration Te
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.data.errors[0].message).toContain('gestor informado é inválido ou pertence a outra empresa');
+    });
+
+    it('should prevent Employee A from accessing Employee B details via employees API (Test A & B - IDOR & Cross-Tenant)', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/employees/${employeeB.id}`,
+        headers: { Authorization: `Bearer ${employeeAToken}` }
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('should ignore parameter tampering of employeeId/companyId in employee-portal/me (Test C - Parameter Tampering)', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/employee-portal/me?employeeId=${employeeB.id}&companyId=${companyB.id}`,
+        headers: { Authorization: `Bearer ${employeeAToken}` }
+      });
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.id).toBe(employeeA.id);
+      expect(body.data.companyId).toBe(companyA.id);
+    });
+
+    it('should prevent user of Company A from signing timesheet of employee in Company B (Test D - Mutation)', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/timesheets/sign',
+        headers: { Authorization: `Bearer ${employeeAToken}` },
+        payload: {
+          employeeId: employeeB.id,
+          periodMonth: '2026-07'
+        }
+      });
+      expect(response.statusCode).toBe(404);
     });
   });
 
@@ -527,6 +566,167 @@ describe('PresençaFlow RH - Sprint 52.1 Verification & Hardening integration Te
       expect(acquiredBAfterRelease).toBe(true);
 
       await JobLock.release(jobName);
+    });
+  });
+
+  describe('10. SSE Radar live-feed checks', () => {
+    const http = require('http');
+
+    const connectSSE = (token: string, onData?: (data: string) => void): Promise<{ req: any; res: any }> => {
+      return new Promise((resolve, reject) => {
+        const req = http.get(
+          `http://127.0.0.1:${port}/api/presence/live-feed`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        req.on('response', (res: any) => {
+          if (onData) {
+            res.on('data', (chunk: Buffer) => onData(chunk.toString()));
+          }
+          resolve({ req, res });
+        });
+        req.on('error', reject);
+      });
+    };
+
+    // Drain time between SSE tests so the 'close' event handler in
+    // presence.ts has time to call cleanup() before the next test
+    // reads presenceEmitter.listenerCount().
+    afterEach(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    });
+
+    it('should connect to SSE and verify stream headers (Test 1: connection)', async () => {
+      const { req, res } = await connectSSE(adminAToken);
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toBe('text/event-stream');
+      expect(res.headers['connection']).toBe('keep-alive');
+      res.destroy();
+      req.destroy();
+    });
+
+    it('should receive SSE data event on checkin emit (Test 2: heartbeat/data flow)', async () => {
+      // The 15s heartbeat cannot be unit-tested without module-scope stub access.
+      // This test instead verifies the SSE data path works end-to-end:
+      // the server emits a new_checkin event and the client receives it.
+      let dataReceived = '';
+      const { req, res } = await connectSSE(adminAToken, (data) => {
+        dataReceived += data;
+      });
+
+      // Emit a synthetic checkin event for Company A
+      presenceEmitter.emit('new_checkin', {
+        companyId: companyA.id,
+        checkin: { id: 'hb-test', marker: 'heartbeat_flow_check' }
+      });
+
+      // Give event loop time to flush the write
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(dataReceived).toContain('heartbeat_flow_check');
+
+      res.destroy();
+      req.destroy();
+    });
+
+    it('should drop listeners on client disconnect (Test 3: disconnect & Test 4: cleanup)', async () => {
+      const initialListeners = presenceEmitter.listenerCount('new_checkin');
+      const { req, res } = await connectSSE(adminAToken);
+
+      // Verify listener was added
+      expect(presenceEmitter.listenerCount('new_checkin')).toBeGreaterThan(initialListeners);
+
+      res.destroy();
+      req.destroy();
+
+      // Wait for request cleanup hook to execute
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(presenceEmitter.listenerCount('new_checkin')).toBe(initialListeners);
+    });
+
+    it('should isolate checkins by companyId tenant (Test 5: cross-tenant)', async () => {
+      let clientBReceived = false;
+      const { req: reqB, res: resB } = await connectSSE(adminBToken, (data) => {
+        if (data.includes('fullName')) {
+          clientBReceived = true;
+        }
+      });
+
+      let clientAReceivedData = '';
+      const { req: reqA, res: resA } = await connectSSE(adminAToken, (data) => {
+        clientAReceivedData += data;
+      });
+
+      // Emit checkin for Company A
+      presenceEmitter.emit('new_checkin', {
+        companyId: companyA.id,
+        checkin: { id: 'checkin-123', fullName: 'Employee Tenant A' }
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(clientAReceivedData).toContain('Employee Tenant A');
+      expect(clientBReceived).toBe(false);
+
+      resA.destroy();
+      reqA.destroy();
+      resB.destroy();
+      reqB.destroy();
+    });
+
+    it('should dispatch to multiple connected clients of same tenant (Test 6: multiple clients)', async () => {
+      let client1Received = false;
+      const { req: req1, res: res1 } = await connectSSE(adminAToken, (data) => {
+        if (data.includes('Employee Tenant A')) client1Received = true;
+      });
+
+      let client2Received = false;
+      const { req: req2, res: res2 } = await connectSSE(adminAToken, (data) => {
+        if (data.includes('Employee Tenant A')) client2Received = true;
+      });
+
+      // Emit checkin
+      presenceEmitter.emit('new_checkin', {
+        companyId: companyA.id,
+        checkin: { id: 'checkin-123', fullName: 'Employee Tenant A' }
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(client1Received).toBe(true);
+      expect(client2Received).toBe(true);
+
+      res1.destroy();
+      req1.destroy();
+      res2.destroy();
+      req2.destroy();
+    });
+
+    it('should support reconnect and cleanup listeners (Test 7: reconnect & Test 8: abort)', async () => {
+      const initialListeners = presenceEmitter.listenerCount('new_checkin');
+
+      // Connect client - listener count must increase
+      const { req, res } = await connectSSE(adminAToken);
+      const afterConnect = presenceEmitter.listenerCount('new_checkin');
+      expect(afterConnect).toBeGreaterThan(initialListeners);
+
+      // Abort connection - listener count must drop back to initial
+      res.destroy();
+      req.destroy();
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(presenceEmitter.listenerCount('new_checkin')).toBe(initialListeners);
+
+      // Reconnect client - listener count must increase again
+      const { req: req2, res: res2 } = await connectSSE(adminAToken);
+      const afterReconnect = presenceEmitter.listenerCount('new_checkin');
+      expect(afterReconnect).toBeGreaterThan(initialListeners);
+
+      res2.destroy();
+      req2.destroy();
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // After both clients disconnect, count must be back to initial
+      expect(presenceEmitter.listenerCount('new_checkin')).toBe(initialListeners);
     });
   });
 });
